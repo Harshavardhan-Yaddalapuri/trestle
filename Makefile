@@ -11,7 +11,7 @@ $(VENV):
 install: $(VENV)
 
 dev-be:
-	cd backend && uvicorn app.main:app --reload --port 8000
+	cd backend && $(VENV)/bin/uvicorn app.main:app --reload --port 8000
 
 dev-fe:
 	cd frontend && npm run dev
