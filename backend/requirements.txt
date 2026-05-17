@@ -7,3 +7,6 @@ pydantic==2.11.0
 pydantic-settings==2.9.0
 numpy==2.2.0
 sentence-transformers==4.1.0
+openai==1.30.0
+tavily-python==0.3.0
+firecrawl-py==0.0.20
