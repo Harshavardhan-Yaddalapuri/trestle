@@ -1,28 +1,25 @@
+from __future__ import annotations
+import os
+from typing import Optional
 from pydantic_settings import BaseSettings
-
 
 class Settings(BaseSettings):
     # Supabase
     supabase_url: str
     supabase_service_key: str
-
-    # IBM WatsonX (optional for now)
-    watsonx_api_key: str | None = None
-    watsonx_project_id: str | None = None
-    watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
-
-    # Tavily search
-    tavily_api_key: str | None = None
-
-    # Firecrawl scraping
-    firecrawl_api_key: str | None = None
-
-    # OpenAI fallback
-    openai_api_key: str | None = None
+    supabase_anon_key: Optional[str] = None
+    # Ollama (local LLM)
+    ollama_base_url: str = "http://host.docker.internal:11434"
+    ollama_model: str = "mistral"
+    # External services
+    tavily_api_key: Optional[str] = None
+    firecrawl_api_key: Optional[str] = None
+    # Frontend
+    frontend_url: str = "http://localhost:3000"
+    # CORS
+    cors_origins: Optional[str] = None
 
     class Config:
         env_file = ".env"
-        extra = "ignore"
-
 
 settings = Settings()

@@ -1,69 +1,47 @@
-"""Firecrawl scraping integration for extracting structured data from resource URLs."""
+"""Firecrawl — deep page scraping with markdown output."""
 from __future__ import annotations
-
 from typing import Any, Dict, Optional
 import httpx
-
 from app.config import settings
 
-FIRECRAWL_BASE = "https://api.firecrawl.dev/v1"
-
-
-class FirecrawlScraper:
-    """Firecrawl client for scraping resource pages."""
-
-    def __init__(self, api_key: str | None = None):
+class FirecrawlClient:
+    def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.firecrawl_api_key
+        self.base_url = "https://api.firecrawl.dev/v1"
+
+    async def scrape(self, url: str, formats: Optional[list] = None) -> Dict[str, Any]:
+        """Scrape a single URL and return structured data."""
         if not self.api_key:
-            raise ValueError("FIRECRAWL_API_KEY not set")
-
-    async def scrape(
-        self,
-        url: str,
-        formats: list[str] | None = None,
-    ) -> Dict[str, Any]:
-        """Scrape a URL and return structured content."""
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        payload = {"url": url}
-        if formats:
-            payload["formats"] = formats
-        else:
-            payload["formats"] = ["markdown"]
-
-        async with httpx.AsyncClient(timeout=45.0) as client:
+            raise RuntimeError("Firecrawl API key not configured")
+        endpoint = f"{self.base_url}/scrape"
+        payload = {
+            "url": url,
+            "formats": formats or ["markdown", "html"],
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
-                f"{FIRECRAWL_BASE}/scrape",
-                headers=headers,
+                endpoint,
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 json=payload,
             )
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json()
 
-        if data.get("success") and data.get("data"):
-            return data["data"]
-        return {"url": url, "markdown": "", "metadata": {}}
-
-    async def extract_resource_info(self, url: str) -> Dict[str, Any]:
-        """Scrape a resource URL and return structured info for our DB."""
-        data = await self.scrape(url, formats=["markdown"])
-        markdown = data.get("markdown", "")
-        meta = data.get("metadata", {})
-
-        return {
-            "title": meta.get("title", "Untitled"),
-            "description": meta.get("description", markdown[:500] if markdown else ""),
-            "url": url,
-            "last_scraped": meta.get("scrapedAt"),
-            "source_markdown": markdown[:2000] if markdown else "",
-        }
+    async def crawl(self, url: str, limit: int = 10) -> Dict[str, Any]:
+        """Crawl a site with link depth limit."""
+        if not self.api_key:
+            raise RuntimeError("Firecrawl API key not configured")
+        endpoint = f"{self.base_url}/crawl"
+        payload = {"url": url, "limit": limit}
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                endpoint,
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+            resp.raise_for_status()
+            return resp.json()
 
 
-# Singleton
-firecrawl_client: FirecrawlScraper | None = None
-
-
-def get_firecrawl() -> FirecrawlScraper:
-    global firecrawl_client
-    if firecrawl_client is None:
-        firecrawl_client = FirecrawlScraper()
-    return firecrawl_client
+def get_firecrawl() -> FirecrawlClient:
+    return FirecrawlClient()

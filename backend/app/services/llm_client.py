@@ -1,104 +1,53 @@
-"""LLM client: IBM Watsonx primary, OpenAI fallback."""
+"""Ollama local LLM client — intent parsing, summarization, change detection."""
 from __future__ import annotations
-
 import json
 from typing import Any, Dict, List, Optional
 import httpx
-
 from app.config import settings
 
+class OllamaClient:
+    """Talk to local Ollama instance via HTTP API."""
 
-class LLMClient:
-    """Unified LLM client — IBM Watsonx primary, OpenAI fallback."""
+    def __init__(self, model: Optional[str] = None, base_url: Optional[str] = None):
+        self.model = model or settings.ollama_model
+        self.base_url = base_url or settings.ollama_base_url
 
-    def __init__(self):
-        # Track which backend is active
-        self.provider = "none"
-        self._openai_key = settings.openai_api_key
-        self._watsonx_key = settings.watsonx_api_key
-        self._watsonx_project = settings.watsonx_project_id
-        self._watsonx_url = settings.watsonx_url
-
-    async def _watsonx_generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
-        """Generate text using IBM watsonx Granite."""
-        # First get IAM token
-        token_url = "https://iam.cloud.ibm.com/identity/token"
-        token_data = {
-            "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
-            "apikey": self._watsonx_key,
-        }
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            token_resp = await client.post(token_url, data=token_data)
-            token_resp.raise_for_status()
-            access_token = token_resp.json()["access_token"]
-
-        # Generate
-        gen_url = f"{self._watsonx_url}/ml/v1/text/generation"
+    async def generate(self, prompt: str, system: Optional[str] = None, max_tokens: int = 2048, temperature: float = 0.3) -> str:
+        url = f"{self.base_url}/api/generate"
         payload = {
-            "model_id": "ibm/granite-3-2-8b-instruct",
-            "project_id": self._watsonx_project,
-            "input": prompt,
-            "parameters": {
-                "max_new_tokens": max_tokens,
+            "model": self.model,
+            "prompt": prompt,
+            "system": system or "",
+            "options": {
+                "num_predict": max_tokens,
                 "temperature": temperature,
-                "decoding_method": "greedy",
             },
+            "stream": False,
         }
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(gen_url, headers=headers, json=payload)
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(url, json=payload)
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json().get("response", "")
 
-        # Extract text
-        results = data.get("results", [{}])
-        if results:
-            return results[0].get("generated_text", "")
-        return ""
-
-    async def _openai_generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
-        """Generate text using OpenAI (fallback)."""
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self._openai_key}",
-            "Content-Type": "application/json",
-        }
+    async def chat(self, messages: List[Dict[str, str]], max_tokens: int = 2048, temperature: float = 0.3) -> str:
+        url = f"{self.base_url}/api/chat"
         payload = {
-            "model": "gpt-3.5-turbo",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            "model": self.model,
+            "messages": messages,
+            "options": {
+                "num_predict": max_tokens,
+                "temperature": temperature,
+            },
+            "stream": False,
         }
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, headers=headers, json=payload)
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(url, json=payload)
             resp.raise_for_status()
-            data = resp.json()
-        return data["choices"][0]["message"]["content"]
+            return resp.json().get("message", {}).get("content", "")
 
-    async def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> str:
-        """Generate text — tries Watsonx first, falls back to OpenAI."""
-        if self._watsonx_key and self._watsonx_project and self._watsonx_project != "your-project-id-here":
-            try:
-                result = await self._watsonx_generate(prompt, max_tokens, temperature)
-                self.provider = "watsonx"
-                return result
-            except Exception:
-                pass  # Fall through to OpenAI
-
-        if self._openai_key:
-            result = await self._openai_generate(prompt, max_tokens, temperature)
-            self.provider = "openai"
-            return result
-
-        raise RuntimeError("No LLM provider configured")
-
-    async def parse_json(self, prompt: str, max_tokens: int = 512, temperature: float = 0.3) -> Dict[str, Any]:
-        """Generate text and parse as JSON."""
-        text = await self.generate(prompt, max_tokens, temperature)
-        # Clean up potential markdown code blocks
+    async def parse_json(self, prompt: str, system: Optional[str] = None, max_tokens: int = 2048) -> Dict[str, Any]:
+        text = await self.generate(prompt, system=system, max_tokens=max_tokens, temperature=0.1)
+        # Clean markdown code blocks
         text = text.strip()
         if text.startswith("```json"):
             text = text[7:]
@@ -110,12 +59,11 @@ class LLMClient:
         return json.loads(text)
 
 
-# Singleton
-_llm_client: LLMClient | None = None
+_singleton: Optional[OllamaClient] = None
 
 
-def get_llm() -> LLMClient:
-    global _llm_client
-    if _llm_client is None:
-        _llm_client = LLMClient()
-    return _llm_client
+def get_llm() -> OllamaClient:
+    global _singleton
+    if _singleton is None:
+        _singleton = OllamaClient()
+    return _singleton

@@ -1,134 +1,128 @@
-"""Search API — founder queries resource discovery."""
+"""Search endpoint — intent parse → discover → synthesize → cite."""
 from __future__ import annotations
-
-import json
 from typing import Any, Dict, List
-
 from fastapi import APIRouter, HTTPException
-
-from app.models.schemas import SearchRequest, SearchResponse, FitResult
+from app.models.schemas import SearchRequest, SearchResponse, FitResult, Citation, IntentResult
 from app.services.intent_parser import parse_intent
 from app.services.resource_service import resource_service
+from app.services.scraper_service import scraper_service
+from app.services.source_router import select_sources, build_search_url
 from app.services.llm_client import get_llm
 from app.services.memory_service import memory_service
 
-router = APIRouter(prefix="/api/search", tags=["search"])
+router = APIRouter()
 
-_EXPLANATION_PROMPT = """Given this founder profile and this resource, write a concise 2-sentence explanation.
+_EXPLANATION_PROMPT = """Given this founder query and resource, write:
+1. Why this resource fits (max 1 sentence)
+2. Next step (max 1 sentence, specific action)
+Keep under 50 words total.
 
-1. Why this resource fits the founder (what about their profile matches the resource)
-2. The very next step they should take (apply, attend, register, call, etc.)
-
-Keep it under 80 words. No marketing speak. Plain English.
-
-Founder query: {query}
-Resource: {resource_name} ({resource_type})
+Query: {query}
+Resource: {name} ({type})
 Description: {description}
 Deadline: {deadline}
-Funding/Prize: {funding}
+Funding: {funding}
 Location: {location}
-Eligibility: {eligibility}
 """
-
-
-async def _generate_explanation(query: str, resource: Any) -> Dict[str, str]:
-    """Use LLM to generate personalized fit explanation."""
-    prompt = _EXPLANATION_PROMPT.format(
-        query=query,
-        resource_name=resource.name,
-        resource_type=resource.type,
-        description=resource.description or "N/A",
-        deadline=str(resource.deadline) if resource.deadline else "No deadline listed",
-        funding=resource.prize_amount or resource.funding_range or "N/A",
-        location=", ".join(resource.location) if resource.location else "N/A",
-        eligibility=json.dumps(resource.eligibility) if resource.eligibility else "N/A",
-    )
-    try:
-        llm = get_llm()
-        text = await llm.generate(prompt, max_tokens=200, temperature=0.3)
-        # Split into why_fit and next_step
-        sentences = [s.strip() for s in text.split(".") if s.strip()]
-        if len(sentences) >= 2:
-            return {
-                "fit_explanation": ". ".join(sentences[:2]) + ".",
-                "next_step": ". ".join(sentences[2:3]) + "." if len(sentences) > 2 else "Visit the resource link for details.",
-            }
-        return {"fit_explanation": text, "next_step": "Visit the resource link for details."}
-    except Exception:
-        return {
-            "fit_explanation": f"{resource.name} supports {resource.type.replace('_', ' ')} for founders in {', '.join(resource.location) if resource.location else 'your area'}.",
-            "next_step": f"Check the details at {resource.url or 'their website'} to apply or register.",
-        }
 
 
 @router.post("", response_model=SearchResponse)
 async def search_resources(request: SearchRequest) -> SearchResponse:
-    """Main search endpoint — parse query, find resources, explain fit."""
     # 1. Parse intent
     intent = await parse_intent(request.query)
 
-    # 2. Search resources
-    resources = await resource_service.search_by_query_parsed(
-        intent.model_dump(), limit=request.limit
-    )
+    # 2. Check local DB first (active resources matching intent)
+    local_results = await resource_service.search_by_intent(intent.model_dump(), limit=20)
 
-    # 3. Store memory of this query
-    memory_refs = []
+    # 3. If local results are thin, discover fresh ones via Tavily
+    fresh_results: List[Dict[str, Any]] = []
+    fresh_scraped = 0
+    if len(local_results) < 5:
+        discovered = await scraper_service.discover(intent.model_dump(), max_results=8)
+        for d in discovered:
+            # Scrape each discovered URL
+            parsed = await scraper_service.scrape_new_resource(d["url"])
+            if parsed and "resource" in parsed:
+                fresh_results.append(parsed["resource"])
+                fresh_scraped += 1
+
+    # 4. Combine + rank
+    all_resources = local_results + fresh_results
+    scored: List[tuple[float, Any]] = []
+    for i, r in enumerate(all_resources):
+        score = max(0.5, 1.0 - (i * 0.05))
+        if r.status == "active":
+            score += 0.1
+        scored.append((score, r))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = [r for _, r in scored[:request.limit]]
+
+    # 5. Generate explanations + citations
+    results: List[FitResult] = []
+    llm = get_llm()
+    for r in top:
+        prompt = _EXPLANATION_PROMPT.format(
+            query=request.query,
+            name=r.name,
+            type=r.type,
+            description=r.description or "N/A",
+            deadline=str(r.deadline) if r.deadline else "No deadline",
+            funding=r.prize_amount or r.funding_range or "N/A",
+            location=", ".join(r.location) if r.location else "N/A",
+        )
+        try:
+            explanation = await llm.generate(prompt, max_tokens=120, temperature=0.3)
+            sentences = [s.strip() for s in explanation.split(".") if s.strip()]
+            fit_exp = sentences[0] + "." if sentences else f"{r.name} matches your search."
+            next_step = sentences[1] + "." if len(sentences) > 1 else "Visit their site for details."
+        except Exception:
+            fit_exp = f"{r.name} is a {r.type} resource for founders in your area."
+            next_step = "Check the details at their website."
+
+        # Freshness badge
+        if r.last_verified:
+            from datetime import datetime, timezone
+            days = (datetime.now(timezone.utc) - r.last_verified).days
+            badge = f"Verified {days}d ago" if days < 30 else "Needs verification"
+        else:
+            badge = "Discovered today" if not r.id else "Never verified"
+
+        citation = Citation(
+            source=r.provenance.get("source", "web") if r.provenance else "web",
+            url=r.url or "",
+            title=r.name,
+            last_verified=r.last_verified,
+            confidence="verified" if r.last_verified else "unverified",
+        )
+
+        results.append(FitResult(
+            resource=r,
+            fit_explanation=fit_exp,
+            next_step=next_step,
+            confidence_badge=badge,
+            fit_score=max(0.5, 1.0 - (i * 0.05)),
+            citations=[citation],
+        ))
+
+    # 6. Store search memory
     if request.profile_id:
         try:
-            mem = await memory_service.create(
+            await memory_service.create(
                 profile_id=request.profile_id,
-                content=f"Searched: {request.query}. Intent: {intent.model_dump_json()}",
-                category="search",
                 session_id=request.session_id,
-                metadata={"intent": intent.model_dump(), "result_count": len(resources)},
+                content=f"Searched: {request.query}",
+                category="search",
+                metadata={"intent": intent.model_dump(), "result_count": len(results)},
             )
-            memory_refs.append(str(mem.get("id", "")))
         except Exception:
             pass
 
-    # 4. Generate explanations for top results
-    results: List[FitResult] = []
-    for i, resource in enumerate(resources):
-        try:
-            explanation = await _generate_explanation(request.query, resource)
-        except Exception:
-            explanation = {
-                "fit_explanation": f"{resource.name} matches your search criteria.",
-                "next_step": f"Visit their site for details.",
-            }
-
-        # Calculate confidence badge
-        days_ago = 30  # default
-        if resource.updated_at:
-            from datetime import datetime, timezone
-            try:
-                updated = datetime.fromisoformat(str(resource.updated_at).replace("Z", "+00:00"))
-                days_ago = max(1, (datetime.now(timezone.utc) - updated).days)
-            except Exception:
-                pass
-
-        if days_ago <= 7:
-            confidence = f"Verified this week"
-        elif days_ago <= 30:
-            confidence = f"Verified {days_ago} days ago"
-        else:
-            confidence = "Needs verification"
-
-        # Fit score from search
-        fit_score = max(0.5, 1.0 - (i * 0.05))  # Simple decay
-
-        results.append(FitResult(
-            resource=resource,
-            fit_explanation=explanation["fit_explanation"],
-            next_step=explanation["next_step"],
-            confidence_badge=confidence,
-            fit_score=fit_score,
-        ))
-
+    sources_queried = select_sources(intent)
     return SearchResponse(
         query_parsed=intent,
         results=results,
         total_found=len(results),
-        memory_used=memory_refs if memory_refs else None,
+        sources_queried=sources_queried,
+        fresh_sources_scraped=fresh_scraped,
     )
