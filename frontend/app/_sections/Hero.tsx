@@ -13,7 +13,7 @@ export default function Hero() {
           Get out of the weeds and have AI agents support your path forward
         </h1>
 
-        <p className="text-on-surface-variant max-w-lg" style={{ fontSize: "16px", lineHeight: "24px", letterSpacing: "0.5px" }}>
+        <p className="text-on-surface-variant w-full max-w-lg" style={{ fontSize: "16px", lineHeight: "24px", letterSpacing: "0.5px" }}>
           Automated agents that find leads, track events, and research trends
           while you focus on building. Trestle connects your workflows with
           intelligent bridge-builders.
