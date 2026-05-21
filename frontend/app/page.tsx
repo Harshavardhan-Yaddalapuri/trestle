@@ -1,25 +1,22 @@
 "use client";
 
-import Link from "next/link";
-
-/* ─── Page sections ─── */
 import Nav from "./_sections/Nav";
 import Hero from "./_sections/Hero";
 import Features from "./_sections/Features";
-import Pricing from "./_sections/Pricing";
-import Contact from "./_sections/Contact";
+import Trust from "./_sections/Trust";
 import Footer from "./_sections/Footer";
+import MobileNav from "./_sections/MobileNav";
 
 export default function HomePage() {
   return (
     <>
       <Nav />
-      <main className="flex flex-col gap-0">
+      <main className="pt-24 pb-12">
         <Hero />
         <Features />
-        <Pricing />
-        <Contact />
+        <Trust />
       </main>
+      <MobileNav />
       <Footer />
     </>
   );

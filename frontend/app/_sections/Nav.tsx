@@ -4,33 +4,52 @@ import Link from "next/link";
 
 export default function Nav() {
   return (
-    <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-md">
-      <nav className="mx-auto flex max-w-[1440px] items-center justify-between px-6 py-4 md:px-8">
-        {/* Logo */}
-        <Link href="/" className="text-xl font-semibold tracking-tight text-primary">
-          TRESTLE
-        </Link>
+    <nav className="fixed top-0 z-50 w-full bg-surface/80 backdrop-blur-md">
+      <div className="flex justify-between items-center w-full px-4 md:px-8 py-4 max-w-[1440px] mx-auto">
+        <div className="flex items-center gap-8">
+          <Link
+            href="/"
+            className="font-[family-name:var(--font-plus-jakarta)] tracking-tight font-bold text-primary"
+            style={{ fontSize: "28px", lineHeight: "36px" }}
+          >
+            TRESTLE
+          </Link>
 
-        {/* Desktop links */}
-        <ul className="hidden items-center gap-8 text-sm font-medium text-on-surface-variant md:flex">
-          <li>
-            <Link href="/" className="border-b-2 border-primary pb-0.5 text-on-surface">
+          <div className="hidden md:flex gap-6 items-center">
+            <Link
+              href="/"
+              className="text-primary border-b-2 border-primary font-bold pb-1 transition-colors duration-200"
+            >
               Platform
             </Link>
-          </li>
-          <li><Link href="/search" className="hover:text-on-surface">Agents</Link></li>
-          <li><Link href="#pricing" className="hover:text-on-surface">Pricing</Link></li>
-          <li><Link href="#contact" className="hover:text-on-surface">Community</Link></li>
-        </ul>
+            <Link
+              href="/search"
+              className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200"
+            >
+              Agents
+            </Link>
+            <Link
+              href="#pricing"
+              className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200"
+            >
+              Pricing
+            </Link>
+            <Link
+              href="#community"
+              className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200"
+            >
+              Community
+            </Link>
+          </div>
+        </div>
 
-        {/* CTA */}
         <Link
           href="/search"
-          className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-on-primary transition hover:bg-primary-container hover:text-primary"
+          className="bg-primary text-on-primary rounded-full px-6 py-2 font-bold active:scale-90 transition-transform"
         >
           Start Building
         </Link>
-      </nav>
-    </header>
+      </div>
+    </nav>
   );
 }
