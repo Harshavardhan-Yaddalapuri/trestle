@@ -107,6 +107,7 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1)
     profile_id: Optional[UUID] = None
     session_id: Optional[str] = None
+    state: Optional[str] = None
     limit: int = Field(10, ge=1, le=50)
 
 

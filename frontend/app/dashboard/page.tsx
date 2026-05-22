@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [selectedState, setSelectedState] = useState<string>("Michigan");
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ query, limit: 8 }),
+        body: JSON.stringify({ query, state: selectedState, limit: 8 }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
@@ -134,6 +135,21 @@ export default function DashboardPage() {
               <span className="h-2 w-2 rounded-full bg-primary" />
               <span className="text-xs text-on-surface-variant">Online — local Ollama</span>
             </div>
+          </div>
+          <div className="ml-auto flex items-center gap-1">
+            {["Michigan", "Illinois"].map((state) => (
+              <button
+                key={state}
+                onClick={() => setSelectedState(state)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  selectedState === state
+                    ? "bg-primary text-on-primary"
+                    : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                }`}
+              >
+                {state}
+              </button>
+            ))}
           </div>
         </header>
 

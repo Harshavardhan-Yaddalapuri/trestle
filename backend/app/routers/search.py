@@ -31,6 +31,10 @@ async def search_resources(request: SearchRequest) -> SearchResponse:
     # 1. Parse intent
     intent = await parse_intent(request.query)
 
+    # 1a. Override intent.state if user explicitly chose a state
+    if request.state:
+        intent.state = request.state
+
     # 2. Check local DB first (active resources matching intent)
     local_results = await resource_service.search_by_intent(intent.model_dump(), limit=20)
 
@@ -48,6 +52,15 @@ async def search_resources(request: SearchRequest) -> SearchResponse:
 
     # 4. Combine + rank
     all_resources = local_results + fresh_results
+
+    # 4a. Filter by state if explicitly requested (location array contains state, case-insensitive)
+    if request.state:
+        state_lower = request.state.lower()
+        all_resources = [
+            r for r in all_resources
+            if r.location and any(state_lower in loc.lower() for loc in r.location)
+        ]
+
     scored: List[tuple[float, Any]] = []
     for i, r in enumerate(all_resources):
         score = max(0.5, 1.0 - (i * 0.05))
@@ -113,7 +126,7 @@ async def search_resources(request: SearchRequest) -> SearchResponse:
                 session_id=request.session_id,
                 content=f"Searched: {request.query}",
                 category="search",
-                metadata={"intent": intent.model_dump(), "result_count": len(results)},
+                metadata={"intent": intent.model_dump(), "result_count": len(results), "state": request.state},
             )
         except Exception:
             pass
