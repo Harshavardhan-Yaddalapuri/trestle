@@ -6,8 +6,22 @@ import Link from "next/link";
 import { SearchInput } from "@/app/_components/SearchInput";
 import { ArrowLeft } from "lucide-react";
 
-function SearchResults() {
-  // Placeholder — real implementation calls /api/search
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const stateParam = searchParams.get("state") || undefined;
+
+  return (
+    <>
+      <SearchInput state={stateParam} />
+      <Suspense fallback={<div className="py-20 text-center text-sm text-on-surface-variant">Searching...</div>}>
+        <SearchResults state={stateParam} />
+      </Suspense>
+    </>
+  );
+}
+
+function SearchResults({ state }: { state?: string }) {
+  // Placeholder — real implementation calls /api/search with state param
   return <div className="text-center text-on-surface-variant">Loading results...</div>;
 }
 
@@ -23,9 +37,8 @@ export default function SearchPage() {
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <SearchInput />
-        <Suspense fallback={<div className="py-20 text-center text-sm text-on-surface-variant">Searching...</div>}>
-          <SearchResults />
+        <Suspense fallback={<div className="py-20 text-center text-sm text-on-surface-variant">Loading...</div>}>
+          <SearchContent />
         </Suspense>
       </main>
     </div>
