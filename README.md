@@ -1,6 +1,6 @@
 # Trestle v0.2
 
-AI-powered founder resource discovery engine. Freshness-first.
+AI-powered founder resource discovery engine. Freshness-first.  
 
 ## Architecture
 
