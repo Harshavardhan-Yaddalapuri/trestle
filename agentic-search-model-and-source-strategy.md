@@ -63,6 +63,18 @@ Do not assume one "best" model. Test capability classes against the same benchma
 
 At test time, select current representative models from several providers and run them on the same founder profiles, prompts, and scoring rubric. Avoid relying on vendor claims; use empirical performance on this benchmark.
 
+## Concrete Candidates to Include
+
+Confirm availability and pricing at the time of the run, but the first benchmark should include:
+
+- **A deep-research product/agent:** OpenAI Deep Research, Google Gemini Deep Research, Perplexity Deep Research, or a comparable hosted research agent. These are optimized for iterative search, reading many pages, and returning cited reports.
+- **A frontier tool-use model with your own browser/search loop:** use this to test whether a product-controlled agent can beat a hosted research agent through better prompts, category quotas, and validation schemas.
+- **A search-grounded model/API:** Perplexity Sonar or Search API, Gemini with Google Search grounding, or a similar web-grounded answer/search system. These are useful for currentness and citation behavior.
+- **A search/research infrastructure API:** Exa Search/Agent, Tavily Search/Research, Firecrawl, or similar tools. These test whether better retrieval and crawling improves recall more than changing the reasoning model.
+- **A cheaper extraction model:** run after pages are fetched to normalize fields such as deadline, amount, geography, stage, sector, and application URL.
+
+The experiment should separate **model quality** from **retrieval quality**. For example, run the same validator model over candidates gathered by Google-style search, Exa, Tavily, Perplexity Search, and a hosted deep-research agent.
+
 ## Should We Split Off Subagents?
 
 Yes, but compare against a single-agent baseline.
