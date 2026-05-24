@@ -1,6 +1,6 @@
 {
-  "name": "trestle-frontend",
-  "version": "0.2.0",
+  "name": "trestle-web",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,20 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.0",
-    "@tailwindcss/postcss": "^4.0.0",
-    "lucide-react": "^0.460.0",
     "next": "15.1.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwindcss": "^4.0.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "eslint": "^9.0.0",
-    "eslint-config-next": "15.1.0",
-    "typescript": "^5.9.3"
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "typescript": "^5"
   }
 }
