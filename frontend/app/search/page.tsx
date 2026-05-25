@@ -48,7 +48,7 @@ export default function SearchPage() {
       {
         type: "agent",
         agent: {
-          text: "Hi, I'm Trestle — your AI-powered resource discovery assistant. Tell me about your startup and what you're looking for, and I'll find grants, accelerators, pitch competitions, and more that fit your profile.",
+          text: "Hi, I'm Trestle, your AI-powered resource discovery assistant. Tell me about your startup and what you're looking for, and I'll find grants, accelerators, pitch competitions, coworking spaces, events, mentorship programs, and more that fit your profile. After your first message, I'll check if there's anything else I need to know, like your funding stage or target market, to make sure your profile is complete and your results are spot on.",
         },
       },
     ]);
