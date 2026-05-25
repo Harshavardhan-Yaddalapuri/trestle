@@ -1,12 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
-export default function ChatHeader() {
+interface ChatHeaderProps {
+  onMenuToggle: () => void;
+}
+
+export default function ChatHeader({ onMenuToggle }: ChatHeaderProps) {
   return (
     <header className="flex justify-between items-center w-full px-4 md:px-8 py-4 bg-surface/80 backdrop-blur-md sticky top-0 z-10">
       <div className="flex items-center gap-4">
-        <button className="md:hidden text-on-surface">
+        <button
+          className="md:hidden text-on-surface p-2 -ml-2 hover:bg-surface-variant rounded-full transition-colors"
+          onClick={onMenuToggle}
+          aria-label="Open sidebar"
+        >
           <span className="material-symbols-outlined">menu</span>
         </button>
         <div>
@@ -40,13 +49,9 @@ export default function ChatHeader() {
         <button className="p-2 text-on-surface-variant hover:bg-surface-variant rounded-full transition-colors">
           <span className="material-symbols-outlined">search</span>
         </button>
-        <Link
-          href="/search"
-          className="hidden md:flex bg-primary text-on-primary px-6 py-2 rounded-full hover:opacity-90 active:scale-95 transition-transform"
-          style={{ fontSize: "14px", fontWeight: 500 }}
-        >
-          Start Building
-        </Link>
+        <Button asChild className="hidden md:flex rounded-full">
+          <Link href="/search">Start Building</Link>
+        </Button>
       </div>
     </header>
   );

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Sidebar from "./_components/Sidebar";
 import ChatHeader from "./_components/ChatHeader";
 import ChatMessages from "./_components/ChatMessages";
 import ChatInput from "./_components/ChatInput";
 import type { ChatMessage } from "./_components/ChatMessages";
 import { apiClient } from "@/lib/api";
+import { getSessionId } from "@/lib/session";
 
 const DEMO_LEADS = [
   {
@@ -31,20 +32,32 @@ function getTimeString(): string {
   return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-const initialMessages: ChatMessage[] = [
-  { type: "system", content: "Session started at " + new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) },
-];
-
 export default function SearchPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string>("");
+
+  useEffect(() => {
+    const sid = getSessionId();
+    setSessionId(sid);
+
+    const now = getTimeString();
+    setMessages([
+      { type: "system", content: `Session started at ${now}` },
+      {
+        type: "agent",
+        agent: {
+          text: "Hi, I'm Trestle — your AI-powered resource discovery assistant. Tell me about your startup and what you're looking for, and I'll find grants, accelerators, pitch competitions, and more that fit your profile.",
+        },
+      },
+    ]);
+  }, []);
 
   const handleSend = useCallback(async (text: string) => {
     const userTime = getTimeString();
-
     setMessages((prev) => [...prev, { type: "user", content: text, time: userTime }]);
 
-    // Show thinking state
     const thinkingMsg: ChatMessage = {
       type: "agent",
       agent: {
@@ -56,7 +69,11 @@ export default function SearchPage() {
     setLoading(true);
 
     try {
-      const data = await apiClient.search({ query: text, limit: 5 });
+      const data = await apiClient.search({
+        query: text,
+        limit: 5,
+        session_id: sessionId,
+      });
 
       const resultMsg: ChatMessage = {
         type: "agent",
@@ -85,7 +102,6 @@ export default function SearchPage() {
       setMessages((prev) => [...prev.slice(0, -1), resultMsg]);
     } catch (err) {
       void err;
-      // On API error, show demo data
       const demoMsg: ChatMessage = {
         type: "agent",
         agent: {
@@ -102,19 +118,19 @@ export default function SearchPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionId]);
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      <Sidebar />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <main className="flex-1 flex flex-col bg-surface overflow-hidden">
-        <ChatHeader />
+        <ChatHeader onMenuToggle={() => setSidebarOpen((v) => !v)} />
         <ChatMessages messages={messages} />
         <ChatInput onSend={handleSend} disabled={loading} />
 
         {/* Mobile bottom nav */}
-        <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 md:hidden bg-surface-container shadow-lg rounded-t-2xl">
+        <nav className="fixed bottom-0 left-0 w-full z-30 flex justify-around items-center px-2 py-3 md:hidden bg-surface-container shadow-lg rounded-t-2xl">
           {[
             { icon: "chat_bubble", label: "Chat", active: true },
             { icon: "psychology", label: "Agents", active: false },

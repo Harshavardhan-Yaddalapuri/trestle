@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, useEffect } from "react";
+
 interface LeadCard {
   name: string;
   title: string;
@@ -148,14 +150,27 @@ function AgentBubble({ agent }: { agent: AgentMessage }) {
 }
 
 export default function ChatMessages({ messages }: { messages: ChatMessage[] }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 md:px-6 py-6 flex flex-col gap-6 max-w-[1000px] mx-auto w-full" style={{ scrollbarWidth: "none" }}>
+    <div
+      className="flex-1 overflow-y-auto px-4 md:px-6 py-6 flex flex-col gap-6 max-w-[1000px] mx-auto w-full"
+      style={{ scrollbarWidth: "none" }}
+      role="log"
+      aria-live="polite"
+      aria-label="Chat messages"
+    >
       {messages.map((msg, i) => {
         if (msg.type === "system") return <SystemBubble key={i} content={msg.content || ""} />;
         if (msg.type === "user") return <UserBubble key={i} content={msg.content || ""} time={msg.time} />;
         if (msg.type === "agent" && msg.agent) return <AgentBubble key={i} agent={msg.agent} />;
         return null;
       })}
+      <div ref={bottomRef} />
     </div>
   );
 }
