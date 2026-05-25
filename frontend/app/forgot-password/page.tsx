@@ -1,6 +1,4 @@
-/**
- * Forgot password page — stub for Clerk integration.
- */
+/** Auth stub — replace with real forgot-password flow. */
 export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center px-4">

@@ -17,7 +17,7 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 };
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  // Placeholder — Clerk integration will inject the JWT here
+  // Stub — inject auth token here once auth is wired up
   return {};
 }
 

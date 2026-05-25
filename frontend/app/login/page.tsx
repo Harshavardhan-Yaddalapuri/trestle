@@ -1,7 +1,4 @@
-/**
- * Login page — stub for Clerk integration.
- * Your partner will replace this with Clerk's <SignIn /> component.
- */
+/** Auth stub — replace with real sign-in component. */
 export default function LoginPage() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center px-4">

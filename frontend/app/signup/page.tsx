@@ -1,8 +1,4 @@
-/**
- * Signup page — stub for Clerk integration.
- * Your partner will replace this with Clerk's <SignUp /> component
- * configured for magic link + Google OAuth + email/password.
- */
+/** Auth stub — replace with real signup component. */
 export default function SignupPage() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center px-4">

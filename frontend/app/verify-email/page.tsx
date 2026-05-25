@@ -1,7 +1,4 @@
-/**
- * Email verification page — stub for Clerk integration.
- * Clerk handles verification via magic link callback.
- */
+/** Auth stub — replace with real email verification flow. */
 export default function VerifyEmailPage() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center px-4">

@@ -1,6 +1,4 @@
-/**
- * Reset password page — stub for Clerk integration.
- */
+/** Auth stub — replace with real reset-password flow. */
 export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center px-4">
