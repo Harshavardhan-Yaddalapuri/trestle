@@ -8,15 +8,18 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
     networks:
       - trestle-net
+    depends_on:
+      - redis
 
   frontend:
     build: ./frontend
@@ -25,8 +28,20 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
     volumes:
       - ./frontend:/app
+    networks:
+      - trestle-net
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: trestle-redis
+    ports:
+      - "6379:6379"
     networks:
       - trestle-net
 
