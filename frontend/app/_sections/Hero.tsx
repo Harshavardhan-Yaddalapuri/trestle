@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function Hero() {
   return (
@@ -19,13 +20,12 @@ export default function Hero() {
           intelligent bridge-builders.
         </p>
 
-        <Link
-          href="/search"
-          className="bg-primary text-on-primary rounded-full px-12 py-4 font-bold flex items-center gap-2 hover:shadow-lg transition-all active:scale-90"
-        >
-          Continue
-          <span className="material-symbols-outlined">arrow_forward</span>
-        </Link>
+        <Button asChild size="lg" className="rounded-full px-12 py-4 h-auto font-bold">
+          <Link href="/search">
+            Continue
+            <span className="material-symbols-outlined">arrow_forward</span>
+          </Link>
+        </Button>
 
         <div className="flex items-center gap-8 mt-4 border-t border-outline-variant pt-8 w-full">
           {[
@@ -34,10 +34,7 @@ export default function Hero() {
             { value: "99.9%", label: "Uptime" },
           ].map((s) => (
             <div key={s.label}>
-              <p
-                className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold"
-                style={{ fontSize: "22px", lineHeight: "28px" }}
-              >
+              <p className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold" style={{ fontSize: "22px", lineHeight: "28px" }}>
                 {s.value}
               </p>
               <p className="text-on-surface-variant" style={{ fontSize: "11px", lineHeight: "16px", letterSpacing: "0.5px", fontWeight: 500 }}>
