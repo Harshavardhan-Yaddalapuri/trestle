@@ -1,14 +1,13 @@
 /**
- * Signup page — stub for Clerk integration.
- * Your partner will replace this with Clerk's <SignUp /> component
- * configured for magic link + Google OAuth + email/password.
+ * Login page — stub for Clerk integration.
+ * Your partner will replace this with Clerk's <SignIn /> component.
  */
-export default function SignupPage() {
+export default function LoginPage() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center px-4">
       <div className="text-center">
         <h1 className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold text-2xl mb-2">
-          Create Account
+          Sign In
         </h1>
         <p className="text-on-surface-variant">
           This page will be powered by Clerk.

@@ -6,8 +6,7 @@ import ChatHeader from "./_components/ChatHeader";
 import ChatMessages from "./_components/ChatMessages";
 import ChatInput from "./_components/ChatInput";
 import type { ChatMessage } from "./_components/ChatMessages";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiClient } from "@/lib/api";
 
 const DEMO_LEADS = [
   {
@@ -57,14 +56,7 @@ export default function SearchPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API}/api/api/search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text, limit: 5 }),
-      });
-
-      if (!res.ok) throw new Error(`${res.status}`);
-      const data = await res.json();
+      const data = await apiClient.search({ query: text, limit: 5 });
 
       const resultMsg: ChatMessage = {
         type: "agent",
@@ -73,7 +65,7 @@ export default function SearchPage() {
             ? `I found ${data.total_found} matching resources. Here are the top results with the highest fit scores.`
             : "I couldn't find matching resources in the database. Here's a demo of what results would look like:",
           leads: data.results?.length
-            ? data.results.slice(0, 2).map((r: { resource: { name: string; type: string; location?: string[] }; confidence_badge: string; fit_explanation: string }) => ({
+            ? data.results.slice(0, 2).map((r) => ({
                 name: r.resource.name,
                 title: r.resource.type.replace("_", " "),
                 badge: r.confidence_badge,
@@ -90,9 +82,9 @@ export default function SearchPage() {
         },
       };
 
-      // Replace thinking message with result
       setMessages((prev) => [...prev.slice(0, -1), resultMsg]);
-    } catch {
+    } catch (err) {
+      void err;
       // On API error, show demo data
       const demoMsg: ChatMessage = {
         type: "agent",

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function Nav() {
   return (
@@ -16,39 +17,24 @@ export default function Nav() {
           </Link>
 
           <div className="hidden md:flex gap-6 items-center">
-            <Link
-              href="/"
-              className="text-primary border-b-2 border-primary font-bold pb-1 transition-colors duration-200"
-            >
+            <Link href="/" className="text-primary border-b-2 border-primary font-bold pb-1 transition-colors duration-200">
               Platform
             </Link>
-            <Link
-              href="/search"
-              className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200"
-            >
+            <Link href="/search" className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200">
               Agents
             </Link>
-            <Link
-              href="#pricing"
-              className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200"
-            >
+            <Link href="#pricing" className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200">
               Pricing
             </Link>
-            <Link
-              href="#community"
-              className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200"
-            >
+            <Link href="#community" className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200">
               Community
             </Link>
           </div>
         </div>
 
-        <Link
-          href="/search"
-          className="bg-primary text-on-primary rounded-full px-6 py-2 font-bold active:scale-90 transition-transform"
-        >
-          Start Building
-        </Link>
+        <Button asChild className="rounded-full font-bold">
+          <Link href="/search">Start Building</Link>
+        </Button>
       </div>
     </nav>
   );
