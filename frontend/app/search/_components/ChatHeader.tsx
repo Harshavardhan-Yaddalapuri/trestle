@@ -36,15 +36,18 @@ export default function ChatHeader({ onMenuToggle }: ChatHeaderProps) {
 
       <div className="flex items-center gap-2 md:gap-4">
         <div className="hidden lg:flex items-center gap-6 mr-6">
-          <Link href="/" className="text-primary border-b-2 border-primary font-bold pb-1 transition-colors">
-            Platform
+          <Link href="/dashboard" className="text-on-surface-variant font-medium hover:text-primary transition-colors">
+            Hub
           </Link>
-          <Link href="/search" className="text-on-surface-variant font-medium hover:text-primary transition-colors">
+          <Link href="/grants" className="text-on-surface-variant font-medium hover:text-primary transition-colors">
+            My Grants
+          </Link>
+          <Link href="/search" className="text-primary border-b-2 border-primary font-bold pb-1 transition-colors">
             Agents
           </Link>
-          <a href="#" className="text-on-surface-variant font-medium hover:text-primary transition-colors">
-            Pricing
-          </a>
+          <Link href="/" className="text-on-surface-variant font-medium hover:text-primary transition-colors">
+            Platform
+          </Link>
         </div>
         <button className="p-2 text-on-surface-variant hover:bg-surface-variant rounded-full transition-colors">
           <span className="material-symbols-outlined">search</span>

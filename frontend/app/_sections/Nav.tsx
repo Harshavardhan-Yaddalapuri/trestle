@@ -20,6 +20,9 @@ export default function Nav() {
             <Link href="/" className="text-primary border-b-2 border-primary font-bold pb-1 transition-colors duration-200">
               Platform
             </Link>
+            <Link href="/dashboard" className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200">
+              Hub
+            </Link>
             <Link href="/search" className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200">
               Agents
             </Link>

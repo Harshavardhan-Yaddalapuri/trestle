@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import Sidebar from "./_components/Sidebar";
+import AppSidebar from "@/components/app-sidebar";
 import ChatHeader from "./_components/ChatHeader";
 import ChatMessages from "./_components/ChatMessages";
 import ChatInput from "./_components/ChatInput";
@@ -139,7 +139,7 @@ export default function SearchPage() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <main className="flex-1 flex flex-col bg-surface overflow-hidden">
         <ChatHeader onMenuToggle={() => setSidebarOpen((v) => !v)} />
