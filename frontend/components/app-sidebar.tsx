@@ -11,7 +11,6 @@ const mainNav: { icon: string; label: string; href: string }[] = [
   { icon: "smart_toy", label: "Agent Hub", href: "/search" },
   { icon: "assignment", label: "My Grants", href: "/grants" },
   { icon: "travel_explore", label: "Research", href: "/search" },
-  { icon: "hub", label: "Network", href: "#" },
   { icon: "person", label: "Profile", href: "/profile" },
   { icon: "settings", label: "Settings", href: "/settings" },
 ];
