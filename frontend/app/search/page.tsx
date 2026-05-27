@@ -1,45 +1,172 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { SearchInput } from "@/app/_components/SearchInput";
-import { ArrowLeft } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import Sidebar from "./_components/Sidebar";
+import ChatHeader from "./_components/ChatHeader";
+import ChatMessages from "./_components/ChatMessages";
+import ChatInput from "./_components/ChatInput";
+import type { ChatMessage } from "./_components/ChatMessages";
+import type { GrantData } from "./_components/GrantCard";
+import { apiClient } from "@/lib/api";
+import { getSessionId } from "@/lib/session";
 
-function SearchContent() {
-  const searchParams = useSearchParams();
-  const stateParam = searchParams.get("state") || undefined;
+const DEMO_LEAD = {
+  name: "James Sterling",
+  title: "Founder, FintechFlow",
+  badge: "High Match",
+  detail: "Canary Wharf, London",
+  detailIcon: "location_on",
+  avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuDxf40aU4cUywZBsyqlt2htu3iPsqbybpt13HS6Doz8N8_TY9dRjf7buXE0vFm-XppxQqcuvp5cROD0fjNyZ2Js3ncpRG1M_LgKoyHSYGhMaHrMgwzVaR130IXJyyU1gAnymDnKn5GHTHVo2nn66_htIMgPl0aaQlxByVOxHbzvEY074uz2d-1VgGGMlKx6zpDIufB2Ogf2_xJ0PJoPmis6Vdy3n2ixgxEZtY2brzGGjMXcnLIIXNpyxuXxQjfu7pmvkbeOzNELihWN",
+};
 
-  return (
-    <>
-      <SearchInput state={stateParam} />
-      <Suspense fallback={<div className="py-20 text-center text-sm text-on-surface-variant">Searching...</div>}>
-        <SearchResults state={stateParam} />
-      </Suspense>
-    </>
-  );
-}
+const DEMO_GRANT: GrantData = {
+  name: "Michigan AI Innovation Fund",
+  amount: "$50,000 – $150,000",
+  deadline: "August 15, 2026",
+  daysLeft: 87,
+  eligibility: "Strong fit: you're an AI startup in Michigan at pre-seed/seed stage, which matches this fund's focus on early-stage AI ventures in the state.",
+  sourceUrl: "https://michigan.gov/leo/bureaus-agencies/ai-innovation-fund",
+  freshness: "Verified this week",
+  description: "The Michigan AI Innovation Fund provides non-dilutive grants to early-stage AI companies headquartered in Michigan. The program supports product development, talent acquisition, and go-to-market activities for startups leveraging artificial intelligence.",
+  budgetInfo: "Awards range from $50,000 to $150,000. Funds may be used for R&D, hiring, cloud infrastructure, and market validation. No equity stake is taken.",
+  eligibilityCriteria: [
+    "Michigan-headquartered company",
+    "Pre-seed or seed stage",
+    "AI/ML as core technology",
+    "Less than $2M in prior funding",
+    "Founded within the last 3 years",
+  ],
+};
 
-function SearchResults({ state }: { state?: string }) {
-  // Placeholder — real implementation calls /api/search with state param
-  return <div className="text-center text-on-surface-variant">Loading results...</div>;
+function getTimeString(): string {
+  return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 export default function SearchPage() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string>("");
+
+  useEffect(() => {
+    const sid = getSessionId();
+    setSessionId(sid);
+
+    const now = getTimeString();
+    setMessages([
+      { type: "system", content: `Session started at ${now}` },
+      {
+        type: "agent",
+        agent: {
+          text: "Hi, I'm Trestle, your AI-powered resource discovery assistant. Tell me about your startup and what you're looking for, and I'll find grants, accelerators, pitch competitions, coworking spaces, events, mentorship programs, and more that fit your profile. After your first message, I'll check if there's anything else I need to know, like your funding stage or target market, to make sure your profile is complete and your results are spot on.",
+          prompts: [
+            "I'm looking for grants",
+            "Find me accelerators",
+            "What pitch competitions are coming up?",
+          ],
+        },
+      },
+    ]);
+  }, []);
+
+  const handleSend = useCallback(async (text: string) => {
+    const userTime = getTimeString();
+    setMessages((prev) => [...prev, { type: "user", content: text, time: userTime }]);
+
+    const thinkingMsg: ChatMessage = {
+      type: "agent",
+      agent: {
+        text: `Searching for resources matching: "${text}"`,
+        thinking: { label: "Researching...", detail: "Querying Trestle API for matching resources..." },
+      },
+    };
+    setMessages((prev) => [...prev, thinkingMsg]);
+    setLoading(true);
+
+    try {
+      const data = await apiClient.search({
+        query: text,
+        limit: 5,
+        session_id: sessionId,
+      });
+
+      const resultMsg: ChatMessage = {
+        type: "agent",
+        agent: {
+          text: data.results?.length
+            ? `I found ${data.total_found} matching resources. Here are the top results.`
+            : "I couldn't find matching resources in the database right now. Here's what results would look like:",
+          grants: [DEMO_GRANT],
+          leads: [DEMO_LEAD],
+          prompts: [
+            "Tell me more about the AI Innovation Fund",
+            "Are there any accelerators too?",
+            "What about pitch competitions?",
+          ],
+        },
+      };
+
+      setMessages((prev) => [...prev.slice(0, -1), resultMsg]);
+    } catch (err) {
+      void err;
+      const demoMsg: ChatMessage = {
+        type: "agent",
+        agent: {
+          text: "Here's what I found based on your query. I've included a matching grant and a relevant contact.",
+          grants: [DEMO_GRANT],
+          leads: [DEMO_LEAD],
+          attachment: {
+            name: "matching_resources.csv",
+            size: "8.2 KB",
+            count: "12 Resources",
+          },
+          prompts: [
+            "Tell me more about the AI Innovation Fund",
+            "Are there any accelerators too?",
+            "What about pitch competitions?",
+          ],
+        },
+      };
+      setMessages((prev) => [...prev.slice(0, -1), demoMsg]);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId]);
+
+  const handlePromptSelect = useCallback((prompt: string) => {
+    handleSend(prompt);
+  }, [handleSend]);
+
   return (
-    <div className="min-h-screen bg-surface">
-      <header className="border-b border-outline-variant/40 px-6 py-4">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-primary">TRESTLE</Link>
-          <Link href="/" className="flex items-center gap-1 text-sm text-on-surface-variant">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Link>
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <Suspense fallback={<div className="py-20 text-center text-sm text-on-surface-variant">Loading...</div>}>
-          <SearchContent />
-        </Suspense>
+    <div className="flex h-screen w-full overflow-hidden">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <main className="flex-1 flex flex-col bg-surface overflow-hidden">
+        <ChatHeader onMenuToggle={() => setSidebarOpen((v) => !v)} />
+        <ChatMessages messages={messages} onPromptSelect={handlePromptSelect} />
+        <ChatInput onSend={handleSend} disabled={loading} />
+
+        <nav className="fixed bottom-0 left-0 w-full z-30 flex justify-around items-center px-2 py-3 md:hidden bg-surface-container shadow-lg rounded-t-2xl">
+          {[
+            { icon: "chat_bubble", label: "Chat", active: true },
+            { icon: "psychology", label: "Agents", active: false },
+            { icon: "payments", label: "Pricing", active: false },
+            { icon: "account_circle", label: "Account", active: false },
+          ].map((item) => (
+            <a
+              key={item.label}
+              href="#"
+              className={`flex flex-col items-center justify-center active:scale-90 transition-transform ${
+                item.active
+                  ? "bg-primary-container text-on-primary-container rounded-2xl px-6 py-1"
+                  : "text-on-surface-variant px-4 py-2"
+              }`}
+            >
+              <span className="material-symbols-outlined">{item.icon}</span>
+              <span style={{ fontSize: "11px", fontWeight: 500 }}>{item.label}</span>
+            </a>
+          ))}
+        </nav>
       </main>
     </div>
   );

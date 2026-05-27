@@ -1,0 +1,84 @@
+[
+  {
+    "slug": "stage_match",
+    "name": "Development Stage Alignment",
+    "description": "Matches grant stage requirements to founder's current development stage (data_status). Higher score when founder's stage matches or exceeds grant requirements.",
+    "weight": 1.5,
+    "field": "data_status",
+    "operator": "contains_or_exceeds",
+    "value_map": {
+      "benchtop": 1,
+      "glp": 2,
+      "preclinical": 2.5,
+      "clinical": 3,
+      "fda_cleared": 4
+    },
+    "required": true
+  },
+  {
+    "slug": "therapeutic_area_match",
+    "name": "Therapeutic Area Alignment",
+    "description": "Checks if the founder's therapeutic_area matches the grant's therapeutic focus areas. Grants with no specified therapeutic area pass through.",
+    "weight": 1.3,
+    "field": "therapeutic_area",
+    "operator": "intersection",
+    "required": false
+  },
+  {
+    "slug": "sbir_eligibility",
+    "name": "SBIR Eligibility Check",
+    "description": "Verifies SBIR-required criteria: US small business, 500-employee cap, majority US ownership, primary PI employed by SBC. Returns 0 if founder's sbir_eligible flag is false and grant requires SBIR eligibility.",
+    "weight": 2.0,
+    "field": "sbir_eligible",
+    "operator": "boolean_match",
+    "required": true,
+    "hard_fail": true,
+    "fail_message": "Company does not meet SBIR eligibility requirements"
+  },
+  {
+    "slug": "funding_ceiling",
+    "name": "Funding Ceiling Filter",
+    "description": "Filters out grants whose minimum award amount exceeds the founder's capital_need_12m_usd or whose maximum award is below the founder's minimum_grant_size_usd.",
+    "weight": 1.0,
+    "field": "capital_need_12m_usd,minimum_grant_size_usd",
+    "operator": "range_check",
+    "required": false
+  },
+  {
+    "slug": "company_age",
+    "name": "Company Age Restrictions",
+    "description": "Some grants have company age limits (e.g., must be early-stage, founded within 3-5 years). Checks founder's company_age_months against grant's max_company_age constraint.",
+    "weight": 0.8,
+    "field": "company_age_months",
+    "operator": "less_than_max",
+    "required": false
+  },
+  {
+    "slug": "product_type_match",
+    "name": "Product Type Alignment",
+    "description": "Checks if the founder's product_type (device, drug, diagnostic, software, other) matches the grant's product type requirements.",
+    "weight": 1.2,
+    "field": "product_type",
+    "operator": "intersection",
+    "required": false
+  },
+  {
+    "slug": "geographic_scope",
+    "name": "Geographic / Location Match",
+    "description": "Checks if founder's location (state/country) matches grant requirements. Critical for state-level grants like Michigan MEDC.",
+    "weight": 1.5,
+    "field": "location_state,location_country",
+    "operator": "exact_or_country_match",
+    "required": false,
+    "hard_fail_for_state_grants": true
+  },
+  {
+    "slug": "regulatory_pathway_match",
+    "name": "Regulatory Pathway Alignment",
+    "description": "Checks if the founder's planned regulatory pathway matches the grant's regulatory expectations.",
+    "weight": 0.5,
+    "field": "regulatory_pathway",
+    "operator": "intersection",
+    "required": false
+  }
+]

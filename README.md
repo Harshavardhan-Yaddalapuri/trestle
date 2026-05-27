@@ -1,108 +1,110 @@
-# Trestle v0.2
+# Trestle
 
-AI-powered founder resource discovery engine. Freshness-first.
+> **Conversational AI agent for startup founders.** Finds grants, accelerators, and resources you're actually eligible for — not a firehose of irrelevant links.
+
+Trestle is a personal assistant that learns about your startup through natural conversation and proactively surfaces matching opportunities. Built for founders who don't have time to fill out 80-question forms.
 
 ## Architecture
 
-- **Backend:** FastAPI + Supabase (PostgreSQL + Auth) + Ollama (local LLM)
-- **Frontend:** Next.js 15 + Tailwind CSS v4
-- **Scraping:** Firecrawl + Tavily (free tiers)
-- **Packaging:** Docker + docker-compose
+| Layer | Stack |
+|-------|-------|
+| **Frontend** | Next.js 15 (App Router) + Tailwind CSS v4 + shadcn/ui |
+| **Backend** | FastAPI + Supabase (PostgreSQL + Auth) |
+| **LLM** | Ollama (local) — DeepSeek v4 Pro |
+| **Infra** | Docker Compose (frontend, backend, Redis) |
 
 ## Quick Start
 
 ### Prerequisites
 
-- Docker + docker-compose
-- Supabase project (free tier)
+- [Docker](https://docs.docker.com/get-docker/) + docker compose
 - [Ollama](https://ollama.com) running locally with a model pulled
-- Tavily API key (free tier, optional)
-- Firecrawl API key (free tier, optional)
+- [Supabase](https://supabase.com) project (free tier)
+- Node.js 20+ and Python 3.11+ (for local dev without Docker)
 
-### 1. Setup
+### 1. Clone & configure
 
 ```bash
-make setup          # creates .env from template
-#        OR manually:
+git clone https://github.com/Harshavardhan-Yaddalapuri/trestle.git
+cd trestle
 cp .env.example .env
+# Edit .env with your Supabase URL, service key, and anon key
 ```
 
-Edit `.env` with your keys:
-- `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY` — from your Supabase project settings
-- `TAVILY_API_KEY`, `FIRECRAWL_API_KEY` — optional, for live scraping
-- `OLLAMA_MODEL` — defaults to `mistral`; pull it first with `ollama pull mistral`
-
-### 2. Start
+### 2. Start the stack
 
 ```bash
-make dev            # docker compose up --build
+docker compose up --build
 ```
 
-- Backend: http://localhost:8000
-- Frontend: http://localhost:3000
-- Health check: http://localhost:8000/health
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8000 |
+| Health check | http://localhost:8000/health |
 
-### 3. Set up Supabase
+### 3. Set up the database
 
-Run `scripts/supabase_schema.sql` in your Supabase SQL Editor to create tables and policies.
+1. Go to your Supabase project → SQL Editor
+2. Run `backend/migrations/001_initial_schema.sql`
+3. (Optional) Seed grant data: `cd backend && python scripts/seed_grants.py`
 
-## Key Features
+### 4. Register auth redirects
 
-1. **Freshness-first search** — live scraping + diff detection
-2. **Local LLM** — Ollama for intent parsing + explanation generation
-3. **Per-user memory** — agent remembers your profile and past queries
-4. **Change detection** — periodic re-scrape alerts when things change
-5. **No seed data** — resources are discovered on-demand per user query
+In Supabase Dashboard → Auth → URL Configuration:
+- **Site URL:** `http://localhost:3000`
+- **Redirect URLs:** `http://localhost:3000/auth/callback`
 
-## Make Targets
+## User Flow
 
-| Command | Does |
-|---------|------|
-| `make setup` | Create `.env` from template |
-| `make dev` | Build and start all services |
-| `make down` | Stop services |
-| `make clean` | Tear down and remove local images |
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check |
-| `POST` | `/api/search` | Search resources (fresh scraping) |
-| `POST` | `/api/scout/run` | Run scout agent pipeline |
-| `GET` | `/api/scout/status` | Scout agent status |
-| `POST` | `/api/auth/signup` | Create account |
-| `POST` | `/api/auth/login` | Sign in |
-| `GET` | `/api/profiles/me` | Get profile |
-| `PATCH` | `/api/profiles/me` | Update profile |
-| `GET` | `/api/profiles/onboarding-steps` | Onboarding questionnaire |
+```
+Landing page → Sign up / Login → Dashboard (conversational agent)
+                                    ├─ Ask about grants
+                                    ├─ Agent matches eligibility
+                                    ├─ Save / track grants
+                                    └─ Get proactive alerts
+```
 
 ## Project Structure
 
 ```
 trestle/
-  backend/
-    app/
-      main.py              # FastAPI app factory
-      config.py            # Pydantic settings
-      database.py          # Supabase client
-      middleware/auth.py   # JWT verification
-      models/schemas.py    # Pydantic models
-      routers/             # auth, profile, search, scout
-      services/            # LLM, intent, scraping, memory
-    Dockerfile
-    requirements.txt
-  frontend/
-    app/                   # Next.js pages + components
-    lib/supabase.ts        # Supabase client
-    Dockerfile
-    package.json
-  scripts/
-    supabase_schema.sql    # DB migration
-  docker-compose.yml
-  Makefile
-  .env.example
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI app factory
+│   │   ├── config.py            # Pydantic settings
+│   │   ├── database.py          # Supabase client
+│   │   ├── middleware/          # JWT auth, CORS
+│   │   ├── models/              # Pydantic schemas
+│   │   ├── routers/             # auth, profile, search, scout
+│   │   └── services/            # LLM, intent parser, scraping, memory
+│   ├── migrations/              # SQL schema migrations
+│   ├── scripts/                 # Seed data, utilities
+│   ├── tests/                   # pytest suite
+│   └── Dockerfile
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx             # Landing page
+│   │   ├── login/page.tsx       # Email+password login
+│   │   ├── signup/page.tsx      # Account creation
+│   │   ├── dashboard/page.tsx   # Chat interface (authed)
+│   │   ├── search/              # Demo chat (unauthed)
+│   │   ├── auth/                # Auth callback, logout, verify
+│   │   └── _sections/           # Landing page components
+│   ├── components/ui/           # shadcn/ui components
+│   ├── lib/                     # API client, Supabase, session, SSE
+│   └── middleware.ts            # Auth session refresh
+├── docs/                        # Design docs, PRD, architecture
+├── docker-compose.yml
+└── .env.example
 ```
+
+## Security Notes
+
+- **Never commit `.env` files** — they're in `.gitignore`
+- All API keys are read from environment variables — no hardcoded secrets
+- Supabase service role key should only be used server-side (backend, not frontend)
+- Frontend uses the anon key only (safe for client-side)
 
 ## License
 

@@ -1,0 +1,423 @@
+openapi: 3.0.3
+info:
+  title: Trestle Matching API
+  description: >
+    MVP REST API for Trestle grant/investment matching. Supports profile CRUD,
+    deterministic eligibility matching, and opportunity listing.
+  version: 1.0.0-tuesday-demo
+  contact:
+    name: Trestle MVP Team
+servers:
+  - url: http://localhost:8000
+    description: Local MVP server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: API is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /profiles:
+    post:
+      summary: Create or update a founder profile
+      operationId: upsertProfile
+      description: >
+        Idempotent upsert. If `id` is provided and exists, updates the profile.
+        If `id` is omitted or not found, creates a new profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpsertRequest'
+      responses:
+        "200":
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        "201":
+          description: Profile created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        "400":
+          description: Validation error (missing or invalid field)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+
+  /matches:
+    get:
+      summary: Get matched opportunities for a profile
+      operationId: getMatches
+      description: >
+        Returns up to 5 eligible opportunities (grants or investments) for the
+        given `profile_id`. Each match includes a confidence score, rationale
+        string, and a freshness timestamp.
+      parameters:
+        - name: profile_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The unique profile identifier.
+        - name: opportunity_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [grant, investment, all]
+            default: all
+          description: Filter results by opportunity type.
+      responses:
+        "200":
+          description: Match results returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchListResponse'
+        "400":
+          description: Missing or invalid profile_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        "404":
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+        "500":
+          description: Internal server error (e.g., rules engine unreachable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+
+  /grants:
+    get:
+      summary: List grants (admin / debug)
+      operationId: listGrants
+      description: >
+        Returns all grant opportunities in the system. Intended for debugging,
+        admin dashboards, and data quality checks before Tuesday demo.
+      parameters:
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by source (e.g., NIH, SBIR, Grants.gov).
+        - name: is_active
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: Include only active grants.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+          description: Maximum number of results to return.
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          description: Pagination offset.
+      responses:
+        "200":
+          description: Successful list of grants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantListResponse'
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+
+components:
+  schemas:
+    # ──────────────────────────────────────────
+    # Profile
+    # ──────────────────────────────────────────
+    ProfileUpsertRequest:
+      type: object
+      required:
+        - company_name
+        - industry
+        - stage
+        - funding_raised
+        - funding_need
+        - years_in_operation
+        - therapeutic_area
+        - geographic_pref
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Optional. If omitted, auto-generated.
+        company_name:
+          type: string
+          maxLength: 255
+        industry:
+          type: string
+          maxLength: 100
+          description: e.g., medtech, biotech, digital health
+        stage:
+          type: string
+          maxLength: 50
+          description: pre-seed, seed, series_a, series_b
+        funding_raised:
+          type: integer
+          minimum: 0
+          description: Total prior funding raised (USD). Core eligibility filter.
+        funding_need:
+          type: integer
+          minimum: 0
+          description: Approximate USD amount sought
+        years_in_operation:
+          type: integer
+          minimum: 0
+          description: Years since founding/incorporation. Core eligibility filter.
+        therapeutic_area:
+          type: string
+          maxLength: 200
+          description: e.g., cardiovascular, oncology
+        geographic_pref:
+          type: string
+          maxLength: 200
+          description: Preferred region (US, EU, global)
+        accelerator_affiliation:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: e.g., Y Combinator, Techstars. Some grants require accelerator backing.
+        regulatory_pathway:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: e.g., 510(k), PMA, CE
+        employees:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Approximate headcount (for SBIR eligibility)
+
+    ProfileResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        company_name:
+          type: string
+        industry:
+          type: string
+        stage:
+          type: string
+        funding_raised:
+          type: integer
+        funding_need:
+          type: integer
+        years_in_operation:
+          type: integer
+        accelerator_affiliation:
+          type: string
+          nullable: true
+        therapeutic_area:
+          type: string
+        geographic_pref:
+          type: string
+        regulatory_pathway:
+          type: string
+          nullable: true
+        employees:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ──────────────────────────────────────────
+    # Matches
+    # ──────────────────────────────────────────
+    MatchListResponse:
+      type: object
+      properties:
+        profile_id:
+          type: string
+        total_matches:
+          type: integer
+          description: Count returned in this response (≤ 5)
+        degraded:
+          type: boolean
+          description: Whether results are from stale cache (engine failure fallback)
+        freshness_timestamp:
+          type: string
+          format: date-time
+          description: Max( profile.updated_at, opportunity.updated_at, rule.updated_at )
+        matches:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/MatchItem'
+
+    MatchItem:
+      type: object
+      properties:
+        opportunity_id:
+          type: string
+        opportunity_type:
+          type: string
+          enum: [grant, investment]
+        title_or_fund:
+          type: string
+          description: Human-readable name (grant title or fund name)
+        confidence_score:
+          type: integer
+          description: Cumulative points from passing rules
+        rationale:
+          type: string
+          description: Human-readable explanation of why matched
+        source_url:
+          type: string
+          format: uri
+          nullable: true
+
+    # ──────────────────────────────────────────
+    # Grants (Admin)
+    # ──────────────────────────────────────────
+    GrantListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrantItem'
+
+    GrantItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        source_url:
+          type: string
+          format: uri
+          nullable: true
+        funding_min:
+          type: integer
+          nullable: true
+        funding_max:
+          type: integer
+          nullable: true
+        deadline:
+          type: string
+          format: date
+          nullable: true
+        industry_focus:
+          type: string
+          nullable: true
+        stage_eligible:
+          type: string
+          nullable: true
+        therapeutic_focus:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+
+    # ──────────────────────────────────────────
+    # Errors
+    # ──────────────────────────────────────────
+    ValidationError:
+      type: object
+      properties:
+        error_code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: "profile_id is required"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              issue:
+                type: string
+
+    NotFoundError:
+      type: object
+      properties:
+        error_code:
+          type: string
+          example: NOT_FOUND
+        message:
+          type: string
+          example: "Profile with id 'abc' not found."
+
+    GenericError:
+      type: object
+      properties:
+        error_code:
+          type: string
+          example: INTERNAL_ERROR
+        message:
+          type: string
+          example: "Unexpected server error."
+
+  # ──────────────────────────────────────────
+  # Example request/response pairs (as markdown documentation)
+  # ──────────────────────────────────────────

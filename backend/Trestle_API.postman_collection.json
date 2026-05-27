@@ -1,0 +1,238 @@
+{
+  "info": {
+    "name": "Trestle v1 API",
+    "description": "Conversational personal assistant for startup founders — v1: Grant Intelligence.\n\n## Security\n- Private endpoints require `Authorization: Bearer <access_token>`\n- Tokens validated against Supabase JWKS\n- CORS restricted to frontend origin\n- Passwords never returned in responses\n- Cookies: httponly, secure, samesite=lax",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "base_url", "value": "http://localhost:8000"},
+    {"key": "access_token", "value": ""},
+    {"key": "anon_session_id", "value": ""},
+    {"key": "user_email", "value": "founder@example.com"},
+    {"key": "user_password", "value": "securepassword123"}
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Public — no auth required. Returns DB and Supabase status."
+          }
+        },
+        {
+          "name": "Deep Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health/deep",
+            "description": "Public — verifies Supabase JWKS endpoint + DB connectivity."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Public",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/signup",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\",\n  \"name\": \"Jane Founder\"\n}"
+            },
+            "description": "Public — creates new account via Supabase Auth. Returns 201 on success."
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/login",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
+            },
+            "description": "Public — returns access_token + refresh_token. Save access_token to collection variable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.access_token) {",
+                  "  pm.collectionVariables.set('access_token', data.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Magic Link",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/magic-link/send",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\"\n}"
+            },
+            "description": "Public — sends magic link email via Supabase Auth."
+          }
+        },
+        {
+          "name": "Create Anonymous Session",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/anonymous-session",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "Public — creates anonymous session, sets cookie. Save session_id for merge."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.session_id) {",
+                  "  pm.collectionVariables.set('anon_session_id', data.session_id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Anonymous Session",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/anon-session",
+            "description": "Public — returns current anonymous session from cookie. Returns null if no session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Private",
+      "item": [
+        {
+          "name": "Get Profile (/me)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"}
+            ],
+            "description": "PRIVATE — returns user profile. Requires valid access_token."
+          }
+        },
+        {
+          "name": "Merge Anonymous Session",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/merge-session",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{access_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"anon_session_id\": \"{{anon_session_id}}\"\n}"
+            },
+            "description": "PRIVATE — merges anonymous session data into authenticated user account."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/auth/logout",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"}
+            ],
+            "description": "PRIVATE — logs out user (client-side token discard). Requires valid access_token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('access_token', '');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Security Tests",
+      "item": [
+        {
+          "name": "[TEST] /me without token",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "description": "Should return 401 — no Authorization header."
+          }
+        },
+        {
+          "name": "[TEST] /me with expired token",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              {"key": "Authorization", "value": "Bearer expired.token.here"}
+            ],
+            "description": "Should return 401 — expired or invalid JWT."
+          }
+        },
+        {
+          "name": "[TEST] /me with malformed token",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              {"key": "Authorization", "value": "not-even-a-jwt"}
+            ],
+            "description": "Should return 401 — malformed Bearer token."
+          }
+        },
+        {
+          "name": "[TEST] /me without Bearer prefix",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/auth/me",
+            "header": [
+              {"key": "Authorization", "value": "{{access_token}}"}
+            ],
+            "description": "Should return 401 — token present but missing 'Bearer ' prefix."
+          }
+        }
+      ]
+    }
+  ]
+}

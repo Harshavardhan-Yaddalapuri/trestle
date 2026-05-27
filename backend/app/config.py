@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: Optional[str] = None
 
-    class Config:
-        env_file = ".env"
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 settings = Settings()

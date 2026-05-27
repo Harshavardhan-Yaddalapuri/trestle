@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -18,7 +20,7 @@ export default function SignupPage() {
     setError("");
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) setError(error.message);
-    else window.location.href = "/onboarding";
+    else router.push("/onboarding");
     setLoading(false);
   }
 

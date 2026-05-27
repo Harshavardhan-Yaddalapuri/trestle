@@ -1,37 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { Search, ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 
-export function SearchInput({ defaultValue = "", state }: { defaultValue?: string; state?: string }) {
-  const [query, setQuery] = useState(defaultValue);
+export function SearchInput({ defaultValue = "" }: { defaultValue?: string }) {
+  const [q, setQ] = useState(defaultValue);
+  const router = useRouter();
 
-  function buildUrl() {
-    let url = `/search?q=${encodeURIComponent(query)}`;
-    if (state) url += `&state=${encodeURIComponent(state)}`;
-    return url;
-  }
+  const submit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!q.trim()) return;
+    router.push(`/search?q=${encodeURIComponent(q.trim())}`);
+  };
 
   return (
-    <div className="flex items-center gap-2 rounded-full bg-surface-container px-4 py-3 ring-1 ring-outline-variant/50">
-      <Search className="h-5 w-5 text-on-surface-variant" />
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && query.trim()) {
-            window.location.href = buildUrl();
-          }
-        }}
-        placeholder="Search resources..."
-        className="flex-1 bg-transparent text-sm outline-none placeholder:text-on-surface-variant/50"
-      />
+    <form onSubmit={submit} className="flex w-full max-w-lg items-center gap-2">
+      <div className="relative flex-1">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="What are you looking for?"
+          className="w-full rounded-full bg-surface-container py-3 pl-10 pr-4 text-sm outline-none ring-1 ring-outline-variant transition placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-primary"
+        />
+      </div>
       <button
-        onClick={() => query.trim() && (window.location.href = buildUrl())}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary"
+        type="submit"
+        className="rounded-full bg-primary px-5 py-3 text-sm font-medium text-on-primary transition hover:bg-primary-container hover:text-primary"
       >
-        <ArrowRight className="h-4 w-4" />
+        Search
       </button>
-    </div>
+    </form>
   );
 }
