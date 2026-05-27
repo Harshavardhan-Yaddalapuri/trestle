@@ -21,11 +21,18 @@ export default function Hero() {
         </p>
 
         <Button asChild size="lg" className="rounded-full px-12 py-4 h-auto font-bold">
-          <Link href="/search">
-            Continue
+          <Link href="/signup">
+            Start Building
             <span className="material-symbols-outlined">arrow_forward</span>
           </Link>
         </Button>
+
+        <p className="text-on-surface-variant" style={{ fontSize: "14px", lineHeight: "20px" }}>
+          Already have an account?{" "}
+          <Link href="/login" className="text-primary font-medium hover:underline">
+            Sign in
+          </Link>
+        </p>
 
         <div className="flex items-center gap-8 mt-4 border-t border-outline-variant pt-8 w-full">
           {[

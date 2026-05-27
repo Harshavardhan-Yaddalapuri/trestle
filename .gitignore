@@ -1,8 +1,10 @@
 node_modules
 __pycache__
 .env
+.env.local
 *.pyc
 .next
 .venv
 *.log
 pgdata
+.DS_Store
