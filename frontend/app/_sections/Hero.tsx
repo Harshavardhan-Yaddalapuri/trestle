@@ -27,22 +27,6 @@ export default function Hero() {
           </Link>
         </Button>
 
-        <div className="flex items-center gap-8 mt-4 border-t border-outline-variant pt-8 w-full">
-          {[
-            { value: "500+", label: "Active Agents" },
-            { value: "12k+", label: "Leads Found" },
-            { value: "99.9%", label: "Uptime" },
-          ].map((s) => (
-            <div key={s.label}>
-              <p className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold" style={{ fontSize: "22px", lineHeight: "28px" }}>
-                {s.value}
-              </p>
-              <p className="text-on-surface-variant" style={{ fontSize: "11px", lineHeight: "16px", letterSpacing: "0.5px", fontWeight: 500 }}>
-                {s.label}
-              </p>
-            </div>
-          ))}
-        </div>
       </div>
 
       <div className="md:col-span-6 relative h-[400px] md:h-[600px] w-full flex items-center justify-center">

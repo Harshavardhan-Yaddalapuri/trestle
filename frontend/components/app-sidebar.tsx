@@ -10,7 +10,6 @@ const mainNav: { icon: string; label: string; href: string }[] = [
   { icon: "dashboard", label: "Dashboard", href: "/dashboard" },
   { icon: "smart_toy", label: "Agent Hub", href: "/search" },
   { icon: "assignment", label: "My Grants", href: "/grants" },
-  { icon: "travel_explore", label: "Research", href: "/search" },
   { icon: "person", label: "Profile", href: "/profile" },
   { icon: "settings", label: "Settings", href: "/settings" },
 ];
