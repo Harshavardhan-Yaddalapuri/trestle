@@ -49,9 +49,9 @@ export default function Hero() {
         <div className="w-full h-full relative p-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            alt="Trestle Bridge"
+            alt="Agent network scanning global resources in real time"
             className="w-full h-full object-cover rounded-xl shadow-lg"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdybgKDGbvPGtq51jgg4v5AxbdNqMhvk5-AvD0Wzjr-dnnScyRsEJK_6aV9Z8Bqhnm6yIlN1hhy0CYHw2uZMFwtpLrEqj0P82IVl39qKVoD4IERi7PDrAVnO4RqGWpSqF-Hy09qRrP9KOyiLKfZWNE1LUa6qrm1h-nWCMdXy_uktwh9DUZZzuiyywfzQ55x5ed-Pjw4y8gvQGTYiYMwiu4ltGXbJaS7m-FrRoxiUechF-wBCbrMX2jgPVP8UFzY_yn4hRfUeNLg8T7"
+            src="/images/hero-agent-network.webp"
           />
         </div>
       </div>
