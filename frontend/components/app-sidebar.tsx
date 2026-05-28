@@ -6,16 +6,19 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const mainNav: { icon: string; label: string; href: string }[] = [
+export type MainNavItem = { icon: string; label: string; href: string };
+
+export const MAIN_NAV_ITEMS: MainNavItem[] = [
   { icon: "dashboard", label: "Dashboard", href: "/dashboard" },
-  { icon: "smart_toy", label: "Agent Hub", href: "/search" },
+  { icon: "smart_toy", label: "Agentic Search", href: "/search" },
+  { icon: "hub", label: "Connections", href: "/connections" },
+  { icon: "bookmarks", label: "Resources", href: "/resources" },
   { icon: "assignment", label: "My Grants", href: "/grants" },
   { icon: "person", label: "Profile", href: "/profile" },
   { icon: "settings", label: "Settings", href: "/settings" },
 ];
 
 const footerNav: { icon: string; label: string; href: string }[] = [
-  { icon: "help", label: "Support", href: "#" },
   { icon: "logout", label: "Log Out", href: "#" },
 ];
 
@@ -109,7 +112,7 @@ export default function AppSidebar({ open, onClose }: AppSidebarProps) {
             className="flex-1 flex flex-col gap-1 overflow-y-auto"
             style={{ scrollbarWidth: "none" }}
           >
-            {mainNav.map((item) => {
+            {MAIN_NAV_ITEMS.map((item) => {
               const active = navActive(pathname, item.href);
               const inner = (
                 <>
@@ -147,7 +150,7 @@ export default function AppSidebar({ open, onClose }: AppSidebarProps) {
           <div className="px-2">
             <Button className="w-full py-4 rounded-xl gap-2 h-auto" type="button" variant="secondary">
               <span className="material-symbols-outlined">add</span>
-              New tracked grant
+              Deploy New Agent
             </Button>
           </div>
 

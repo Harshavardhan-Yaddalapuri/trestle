@@ -32,7 +32,7 @@ export const MOCK_TRACKED_GRANTS: TrackedGrantDetail[] = [
         at: iso(new Date("2026-04-01")),
         kind: "created",
         title: "Added to pipeline",
-        detail: "Saved from Agent Hub search results.",
+        detail: "Saved from Agentic Search results.",
       },
       {
         id: "ev-2",

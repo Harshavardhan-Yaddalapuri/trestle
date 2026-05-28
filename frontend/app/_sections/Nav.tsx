@@ -35,9 +35,17 @@ export default function Nav() {
           </div>
         </div>
 
-        <Button asChild className="rounded-full font-bold">
-          <Link href="/search">Start Building</Link>
-        </Button>
+        <div className="hidden md:flex items-center gap-3">
+          <Link
+            href="/login"
+            className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200 px-3 py-2 rounded-full hover:bg-surface-variant/50"
+          >
+            Login
+          </Link>
+          <Button asChild variant="secondary" className="rounded-full font-bold">
+            <Link href="/signup">Sign up</Link>
+          </Button>
+        </div>
       </div>
     </nav>
   );

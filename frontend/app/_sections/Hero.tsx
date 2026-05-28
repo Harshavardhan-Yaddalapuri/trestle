@@ -22,7 +22,7 @@ export default function Hero() {
 
         <Button asChild size="lg" className="rounded-full px-12 py-4 h-auto font-bold">
           <Link href="/search">
-            Continue
+            Try Trestle
             <span className="material-symbols-outlined">arrow_forward</span>
           </Link>
         </Button>
@@ -35,7 +35,8 @@ export default function Hero() {
           <img
             alt="Agent network scanning global resources in real time"
             className="w-full h-full object-cover rounded-xl shadow-lg"
-            src="/images/hero-agent-network.webp"
+            src="/images/AmericaCenteredRadar.png"
+            /*src="/images/Scanning_Globe.png"*/
           />
         </div>
       </div>

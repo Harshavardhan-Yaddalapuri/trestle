@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AppSidebar from "@/components/app-sidebar";
-import { cn } from "@/lib/utils";
+import MobileTrayNav from "@/components/mobile-tray-nav";
 
 export default function HubShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -36,37 +36,7 @@ export default function HubShell({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-8">{children}</main>
-
-        <nav className="fixed bottom-0 left-0 right-0 z-30 flex justify-around items-center px-1 py-2 md:hidden bg-surface-container border-t border-outline-variant safe-area-pb">
-          {[
-            { href: "/dashboard", icon: "dashboard", label: "Home" },
-            { href: "/grants", icon: "assignment", label: "Grants" },
-            { href: "/search", icon: "smart_toy", label: "Agent" },
-            { href: "/profile", icon: "person", label: "Profile" },
-          ].map((item) => {
-            const active =
-              item.href === "/search"
-                ? pathname.startsWith("/search")
-                : item.href === "/grants"
-                  ? pathname.startsWith("/grants")
-                  : pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex flex-col items-center justify-center rounded-2xl px-4 py-1 min-w-[4rem] transition-colors",
-                  active
-                    ? "bg-primary-container text-on-primary-container"
-                    : "text-on-surface-variant",
-                )}
-              >
-                <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
-                <span className="text-[11px] font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        <MobileTrayNav />
       </div>
     </div>
   );

@@ -106,7 +106,7 @@ export default async function DashboardPage() {
             <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">
               Recent matches
             </CardTitle>
-            <CardDescription>From Agent Hub discovery (illustrative).</CardDescription>
+            <CardDescription>From Agentic Search discovery (illustrative).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {data.recentMatches.map((m) => (
