@@ -39,7 +39,7 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
   }, [value, disabled, onSend]);
 
   return (
-    <footer className="p-4 md:px-6 md:pb-8 bg-surface border-t border-outline-variant/30">
+    <footer className="p-4 pb-24 md:px-6 md:pb-8 bg-surface border-t border-outline-variant/30">
       <div className="max-w-[1000px] mx-auto relative">
         <div className="flex items-end gap-3 bg-surface-container-highest rounded-[28px] p-2 pr-3 shadow-sm border border-transparent focus-within:border-primary transition-all">
           <button
@@ -62,7 +62,7 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             }}
             className="flex-1 bg-transparent border-none focus:ring-0 py-3 text-on-surface resize-none min-h-[48px] max-h-[200px]"
             style={{ fontSize: "16px", lineHeight: "24px", scrollbarWidth: "none" }}
-            placeholder="Message LeadGen Agent..."
+            placeholder="Message Trestle Agent..."
             rows={1}
             disabled={disabled}
             aria-label="Chat message input"

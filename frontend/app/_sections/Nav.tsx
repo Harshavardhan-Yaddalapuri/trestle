@@ -20,6 +20,9 @@ export default function Nav() {
             <Link href="/" className="text-primary border-b-2 border-primary font-bold pb-1 transition-colors duration-200">
               Platform
             </Link>
+            <Link href="/dashboard" className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200">
+              Hub
+            </Link>
             <Link href="/search" className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200">
               Agents
             </Link>
@@ -32,9 +35,17 @@ export default function Nav() {
           </div>
         </div>
 
-        <Button asChild className="rounded-full font-bold">
-          <Link href="/search">Start Building</Link>
-        </Button>
+        <div className="hidden md:flex items-center gap-3">
+          <Link
+            href="/login"
+            className="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200 px-3 py-2 rounded-full hover:bg-surface-variant/50"
+          >
+            Login
+          </Link>
+          <Button asChild variant="secondary" className="rounded-full font-bold">
+            <Link href="/signup">Sign up</Link>
+          </Button>
+        </div>
       </div>
     </nav>
   );
