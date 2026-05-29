@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import AppSidebar from "@/components/app-sidebar";
-import MobileTrayNav from "@/components/mobile-tray-nav";
+import Sidebar from "./_components/Sidebar";
 import ChatHeader from "./_components/ChatHeader";
 import ChatMessages from "./_components/ChatMessages";
 import ChatInput from "./_components/ChatInput";
@@ -140,13 +139,34 @@ export default function SearchPage() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
-      <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <main className="flex-1 flex flex-col bg-surface overflow-hidden">
         <ChatHeader onMenuToggle={() => setSidebarOpen((v) => !v)} />
         <ChatMessages messages={messages} onPromptSelect={handlePromptSelect} />
         <ChatInput onSend={handleSend} disabled={loading} />
-        <MobileTrayNav />
+
+        <nav className="fixed bottom-0 left-0 w-full z-30 flex justify-around items-center px-2 py-3 md:hidden bg-surface-container shadow-lg rounded-t-2xl">
+          {[
+            { icon: "chat_bubble", label: "Chat", active: true },
+            { icon: "psychology", label: "Agents", active: false },
+            { icon: "payments", label: "Pricing", active: false },
+            { icon: "account_circle", label: "Account", active: false },
+          ].map((item) => (
+            <a
+              key={item.label}
+              href="#"
+              className={`flex flex-col items-center justify-center active:scale-90 transition-transform ${
+                item.active
+                  ? "bg-primary-container text-on-primary-container rounded-2xl px-6 py-1"
+                  : "text-on-surface-variant px-4 py-2"
+              }`}
+            >
+              <span className="material-symbols-outlined">{item.icon}</span>
+              <span style={{ fontSize: "11px", fontWeight: 500 }}>{item.label}</span>
+            </a>
+          ))}
+        </nav>
       </main>
     </div>
   );

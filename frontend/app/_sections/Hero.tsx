@@ -21,22 +21,44 @@ export default function Hero() {
         </p>
 
         <Button asChild size="lg" className="rounded-full px-12 py-4 h-auto font-bold">
-          <Link href="/search">
-            Try Trestle
+          <Link href="/signup">
+            Start Building
             <span className="material-symbols-outlined">arrow_forward</span>
           </Link>
         </Button>
 
+        <p className="text-on-surface-variant text-sm">
+          Already have an account?{" "}
+          <Link href="/login" className="text-primary font-medium hover:underline">
+            Sign in
+          </Link>
+        </p>
+
+        <div className="flex items-center gap-8 mt-4 border-t border-outline-variant pt-8 w-full">
+          {[
+            { value: "500+", label: "Active Agents" },
+            { value: "12k+", label: "Leads Found" },
+            { value: "99.9%", label: "Uptime" },
+          ].map((s) => (
+            <div key={s.label}>
+              <p className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold" style={{ fontSize: "22px", lineHeight: "28px" }}>
+                {s.value}
+              </p>
+              <p className="text-on-surface-variant" style={{ fontSize: "11px", lineHeight: "16px", letterSpacing: "0.5px", fontWeight: 500 }}>
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="md:col-span-6 relative h-[400px] md:h-[600px] w-full flex items-center justify-center">
         <div className="w-full h-full relative p-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            alt="Agent network scanning global resources in real time"
+            alt="Trestle Bridge"
             className="w-full h-full object-cover rounded-xl shadow-lg"
-            src="/images/AmericaCenteredRadar.png"
-            /*src="/images/Scanning_Globe.png"*/
+            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdybgKDGbvPGtq51jgg4v5AxbdNqMhvk5-AvD0Wzjr-dnnScyRsEJK_6aV9Z8Bqhnm6yIlN1hhy0CYHw2uZMFwtpLrEqj0P82IVl39qKVoD4IERi7PDrAVnO4RqGWpSqF-Hy09qRrP9KOyiLKfZWNE1LUa6qrm1h-nWCMdXy_uktwh9DUZZzuiyywfzQ55x5ed-Pjw4y8gvQGTYiYMwiu4ltGXbJaS7m-FrRoxiUechF-wBCbrMX2jgPVP8UFzY_yn4hRfUeNLg8T7"
           />
         </div>
       </div>

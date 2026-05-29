@@ -1,0 +1,2032 @@
+openapi: 3.0.3
+info:
+  title: Trestle Conversational Personal Assistant API
+  version: 2.0.0
+  description: |
+    Low-level design for Trestle — a 24/7 conversational personal assistant for startup founders.
+    v1 skill: Grant Intelligence. Architecture supports multiple future skills (competitor tracking,
+    investor matching, regulatory planning) plugged into a shared founder profile.
+
+    ## Auth
+    All endpoints except anonymous chat first contact and health checks require a valid Clerk JWT:
+    ```
+    Authorization: Bearer <clerk_jwt>
+    ```
+
+    Anonymous sessions use a signed cookie (`anon_session_id`). The backend generates this cookie
+    on first contact and returns it via `Set-Cookie`.
+
+    ## Rate Limits
+    - General API: 60 requests/min per IP
+    - Chat endpoints: 20 messages/min per user
+    - Auth endpoints: 5 requests/min per IP
+    - 429 response with `Retry-After` header
+
+    ## Pagination
+    List endpoints use cursor-based pagination:
+    ```
+    ?cursor=<uuid>&limit=20
+    ```
+    Response includes `next_cursor` (null if last page).
+
+    ## Idempotency
+    Mutating endpoints accept `Idempotency-Key: <uuid>` header. Duplicate requests return the original
+    response with status 200. First-time requests process normally.
+
+    ## SSE Protocol
+    Chat streaming uses Server-Sent Events on `GET /api/v1/chat/stream/{job_id}`.
+    Events are JSON-encoded with `event` field:
+    - `event: message_start` — streaming begins
+    - `event: text_delta` — token chunk `{"delta": "..."}`
+    - `event: structured_data` — grant match, profile extraction, lifecycle update `{"type": "...", "data": {...}}`
+    - `event: message_end` — streaming complete
+    - `event: error` — error during streaming
+
+  contact:
+    name: Trestle Architecture Team
+
+servers:
+  - url: https://api.trestle.dev/api/v1
+    description: Production
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ─── Chat ─────────────────────────────────────────────────────────────────
+
+  /chat/message:
+    post:
+      summary: Send a chat message (initiates SSE stream job)
+      description: |
+        Sends a user message to the conversation orchestrator. Returns a `job_id` used to
+        open an SSE stream. Supports idempotency. If no `conversation_id` is provided, a new
+        anonymous or authenticated conversation is started.
+      operationId: sendChatMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageRequest'
+      responses:
+        '202':
+          description: Message accepted — use job_id to open SSE stream
+          headers:
+            Idempotency-Key:
+              schema:
+                type: string
+                format: uuid
+              description: Echo of the idempotency key
+            Set-Cookie:
+              schema:
+                type: string
+              description: anon_session_id cookie (for anonymous sessions)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageAccepted'
+        '409':
+          description: Duplicate idempotency key — original response returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageAccepted'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /chat/stream/{job_id}:
+    get:
+      summary: Stream LLM response via SSE
+      description: |
+        Server-Sent Events stream. Connect with `EventSource` (browser) or equivalent.
+        Events are newline-delimited JSON. Connection closes when message completes or errors.
+      operationId: streamChatResponse
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SSE stream
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum: [text/event-stream]
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-cache]
+            Connection:
+              schema:
+                type: string
+                enum: [keep-alive]
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: message_start
+                data: {"conversation_id": "550e8400-e29b-41d4-a716-446655440000", "role": "assistant"}
+
+                event: text_delta
+                data: {"delta": "I found 3 grants that match"}
+
+                event: text_delta
+                data: {"delta": " your profile..."}
+
+                event: structured_data
+                data: {"type": "grant_match", "data": {"grant_id": "...", "name": "NIH SBIR Phase I", "confidence": "strong", "source_url": "https://grants.gov/..."}}
+
+                event: message_end
+                data: {"message_id": "...", "tokens_used": 342}
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /chat/conversations:
+    get:
+      summary: List user's conversations
+      operationId: listConversations
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated conversation list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConversations'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /chat/conversations/{conversation_id}:
+    get:
+      summary: Get conversation with messages
+      operationId: getConversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Conversation detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetail'
+        '404':
+          $ref: '#/components/responses/ConversationNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      summary: Soft-delete a conversation
+      operationId: deleteConversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/ConversationNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ─── Grants ───────────────────────────────────────────────────────────────
+
+  /grants/match:
+    post:
+      summary: Trigger eligibility matching for current user profile
+      description: |
+        Runs the matching engine synchronously and returns top 3-5 grants.
+        Reads `profiles` table for the authenticated user. Uses Redis cache
+        keyed by profile hash; invalidates on profile update.
+        Every result includes a required `source_url`.
+      operationId: matchGrants
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                max_results:
+                  type: integer
+                  default: 5
+                  minimum: 1
+                  maximum: 20
+                force_refresh:
+                  type: boolean
+                  default: false
+                  description: Bypass cache and re-run matching
+      responses:
+        '200':
+          description: Ranked grant matches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantMatchResponse'
+        '400':
+          description: Profile insufficiently complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: PROFILE_INCOMPLETE
+                  message: Profile completeness score (0.3) is below threshold (0.7)
+                  detail:
+                    missing_fields: ["stage", "location", "team_size"]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /grants/{grant_id}:
+    get:
+      summary: Get deep dive details for a specific grant
+      operationId: getGrant
+      parameters:
+        - name: grant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Grant detail with eligibility breakdown and source_url verification status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantDetailResponse'
+        '404':
+          $ref: '#/components/responses/GrantNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /grants/track:
+    post:
+      summary: Add or update a grant in user's tracking list (creates lifecycle record)
+      description: |
+        Creates or updates a `grant_lifecycle` record. If no existing record, creates with status `saved`.
+        If already exists, updates status/notes. Idempotent.
+      operationId: trackGrant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackGrantRequest'
+      responses:
+        '200':
+          description: Tracking updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantLifecycle'
+        '404':
+          $ref: '#/components/responses/GrantNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      summary: Remove a grant from user's tracking list (soft delete lifecycle record)
+      operationId: untrackGrant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant_id]
+              properties:
+                grant_id:
+                  type: string
+                  format: uuid
+      responses:
+        '204':
+          description: Untracked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /grants/dismiss:
+    post:
+      summary: Dismiss a grant recommendation
+      description: |
+        Records user dismissal with reason. Feeds back to matching model
+        as negative signal. Creates `grants_dismissed` row.
+      operationId: dismissGrant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DismissGrantRequest'
+      responses:
+        '201':
+          description: Dismissal recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantDismissed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─── Grant Lifecycle ──────────────────────────────────────────────────────
+
+  /grants/lifecycle:
+    get:
+      summary: List user's grant lifecycle records
+      operationId: listGrantLifecycles
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [discovered, saved, interested, started, applied, submitted, under_review, accepted, awarded, rejected, reconsidering, dismissed, abandoned, archived]
+        - name: grant_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated lifecycle records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGrantLifecycles'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /grants/lifecycle/{lifecycle_id}:
+    get:
+      summary: Get a single grant lifecycle record
+      operationId: getGrantLifecycle
+      parameters:
+        - name: lifecycle_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lifecycle detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantLifecycle'
+        '404':
+          $ref: '#/components/responses/GrantLifecycleNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /grants/lifecycle/{lifecycle_id}/transitions:
+    get:
+      summary: Get transition audit log for a lifecycle record
+      operationId: listLifecycleTransitions
+      parameters:
+        - name: lifecycle_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated transition records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLifecycleTransitions'
+        '404':
+          $ref: '#/components/responses/GrantLifecycleNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /grants/{grant_id}/lifecycle:
+    post:
+      summary: Transition a grant through the lifecycle state machine
+      description: |
+        Moves a grant from one lifecycle state to another. Validates the transition
+        is allowed (see 14-state machine in PRD). Records the transition in audit log.
+        Idempotent — if already in target state, returns existing record.
+      operationId: transitionGrantLifecycle
+      parameters:
+        - name: grant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleTransitionRequest'
+      responses:
+        '200':
+          description: Transition applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantLifecycle'
+        '400':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: INVALID_TRANSITION
+                  message: Cannot transition from 'discovered' to 'awarded'
+                  detail:
+                    from_status: "discovered"
+                    to_status: "awarded"
+                    allowed_transitions: ["saved", "interested", "dismissed"]
+        '404':
+          $ref: '#/components/responses/GrantNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─── Alerts ───────────────────────────────────────────────────────────────
+
+  /alerts:
+    get:
+      summary: List alerts for the user
+      operationId: listAlerts
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, sent, dismissed, acted]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [new_grant_match, deadline_approaching, deadline_imminent, deadline_passed, review_halfway, decision_expected, decision_overdue, reconsideration_window, no_activity, grant_updated, profile_change_unlock, re_engagement]
+      responses:
+        '200':
+          description: Paginated alert list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlerts'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /alerts/{alert_id}/dismiss:
+    post:
+      summary: Dismiss an alert
+      operationId: dismissAlert
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Alert dismissed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+        '404':
+          $ref: '#/components/responses/AlertNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─── Auth ─────────────────────────────────────────────────────────────────
+
+  /auth/magic-link:
+    post:
+      summary: Request a magic link email
+      description: |
+        Sends a magic link to the provided email address. The link expires in 15 minutes.
+        Rate limited: max 3 per email per hour.
+      operationId: requestMagicLink
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                anon_session_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Optional anonymous session to merge after verification
+      responses:
+        '202':
+          description: Magic link queued for delivery
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queued:
+                    type: boolean
+                    example: true
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/verify:
+    get:
+      summary: Verify magic link token
+      description: |
+        Validates the magic link token and issues a Clerk JWT.
+        Redirects back to the app with `?auth=success`.
+        If `anon_session_id` was provided in the original request, it is included
+        in the redirect for the frontend to call merge-session.
+      operationId: verifyMagicLink
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to app with auth=success
+          headers:
+            Location:
+              schema:
+                type: string
+              example: "https://trestle.dev/?auth=success&anon_session=xxx"
+        '400':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: TOKEN_INVALID
+                  message: Magic link expired or already used
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/merge-session:
+    post:
+      summary: Merge anonymous session into authenticated user
+      description: |
+        Links an anonymous session (from cookie) to a Clerk-authenticated user.
+        Migrates conversations, profile, tracked grants, and dismissed grants.
+        Idempotent if already converted.
+      operationId: mergeAnonymousSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anon_session_id]
+              properties:
+                anon_session_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Merge successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMergeResponse'
+        '400':
+          description: No anonymous session found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/forgot-password:
+    post:
+      summary: Request password reset email
+      description: |
+        Sends a password reset link. Rate limited: 3 per email per hour.
+        Security: always returns 202 even if email doesn't exist (prevent enumeration).
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '202':
+          description: If an account exists, a reset link was sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queued:
+                    type: boolean
+                    example: true
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/reset-password:
+    post:
+      summary: Reset password with token
+      description: |
+        Validates reset token and updates password. Invalidates all existing sessions.
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/verify-email:
+    post:
+      summary: Verify email address
+      description: |
+        Marks user's email as verified. Required for receiving email alerts.
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      summary: Log out current user
+      description: |
+        Invalidates Clerk JWT. Optionally blacklists in short-lived Redis cache.
+        Clears localStorage user state. Returns to anonymous mode.
+      operationId: logout
+      responses:
+        '204':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─── Users ────────────────────────────────────────────────────────────────
+
+  /users/profile:
+    get:
+      summary: Get current user's general-purpose founder profile
+      operationId: getProfile
+      responses:
+        '200':
+          description: User profile with grants tracking/dismissed counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      summary: Update user profile (merge JSONB)
+      description: |
+        Partial update — only provided fields are merged. Fields set to `null`
+        are explicitly deleted from profile_json. Triggers profile-completeness
+        recalculation and cache invalidation.
+      operationId: updateProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /users/preferences:
+    put:
+      summary: Update user preferences (alerts, notifications, proactive frequency, min grant size)
+      operationId: updatePreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePreferencesRequest'
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/skills:
+    get:
+      summary: List user's enabled skills
+      operationId: listUserSkills
+      responses:
+        '200':
+          description: List of enabled skills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Skill'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─── Skills (Read-Only for v1) ──────────────────────────────────────────
+
+  /skills:
+    get:
+      summary: List available skills
+      description: |
+        Returns all skills. v1 ships with `grants` only. Future skills register here.
+      operationId: listSkills
+      security: []
+      responses:
+        '200':
+          description: List of skills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Skill'
+
+  # ─── Health & Admin ───────────────────────────────────────────────────────
+
+  /health:
+    get:
+      summary: Health check
+      description: |
+        No auth required. Returns service + dependency status (DB, Redis, LLM).
+        Used by Vercel/Render uptime monitoring.
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+
+  /health/deep:
+    get:
+      summary: Deep health check (auth required)
+      description: |
+        Verifies all external integrations: DB connection, Redis,
+        LLM API reachability, Supabase Realtime, Clerk JWKS.
+      operationId: deepHealthCheck
+      responses:
+        '200':
+          description: All systems operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeepHealthCheck'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: One or more dependencies degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeepHealthCheck'
+
+  # ─── Webhooks (internal) ──────────────────────────────────────────────────
+
+  /webhooks/clerk:
+    post:
+      summary: Clerk webhook receiver
+      description: |
+        Receives Clerk user creation/update/deletion events.
+        Creates/updates `users` row. Not for frontend consumption.
+      operationId: clerkWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Invalid signature
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Clerk JWT token
+
+  parameters:
+    CursorParam:
+      name: cursor
+      in: query
+      schema:
+        type: string
+        format: uuid
+      description: Pagination cursor (UUID of last item from previous page)
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Items per page
+
+  schemas:
+    # ─── Core Envelopes ─────────────────────────────────────────────────────
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            detail:
+              type: object
+              additionalProperties: true
+
+    PaginatedResponse:
+      type: object
+      required: [data, next_cursor, has_more]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+        next_cursor:
+          type: string
+          nullable: true
+          format: uuid
+        has_more:
+          type: boolean
+        total:
+          type: integer
+          nullable: true
+
+    # ─── Chat ─────────────────────────────────────────────────────────────
+
+    ChatMessageRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: User message text
+        conversation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Existing conversation UUID (omit to start new)
+        context:
+          type: object
+          nullable: true
+          description: Frontend context (page URL, referrer)
+          properties:
+            page:
+              type: string
+            referrer:
+              type: string
+
+    ChatMessageAccepted:
+      type: object
+      required: [job_id, conversation_id, status]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing, cached]
+        estimated_wait_ms:
+          type: integer
+          nullable: true
+
+    Conversation:
+      type: object
+      required: [id, status, turn_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, closed, transferred]
+        turn_count:
+          type: integer
+        first_value_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Message:
+      type: object
+      required: [id, conversation_id, role, content, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant, system, tool]
+        content:
+          type: string
+        intent:
+          type: string
+          nullable: true
+          enum: [greet, discover, match_request, deep_dive, grant_question, dismiss, edge_case, vague, unknown, skill_switch, profile_update, lifecycle_action]
+        tokens_used:
+          type: integer
+          nullable: true
+        latency_ms:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ConversationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Conversation'
+        - type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/Message'
+
+    PaginatedConversations:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+
+    # ─── Grants ─────────────────────────────────────────────────────────────
+
+    Grant:
+      type: object
+      required: [id, source, name, eligibility_rules, status, source_url, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum: [nih_sbir, nsf_sbir, grants_gov, state_ca, state_tx, state_ma, state_ny, state_mi, private_foundation, other]
+        source_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        amount_min_usd:
+          type: integer
+          nullable: true
+        amount_max_usd:
+          type: integer
+          nullable: true
+        deadline:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [open, closed, rolling, upcoming]
+        eligibility_rules:
+          type: object
+          properties:
+            location:
+              type: array
+              items:
+                type: string
+            stage:
+              type: array
+              items:
+                type: string
+              enum: ["idea", "prototype", "pilot", "revenue", "scaling"]
+            team_size_max:
+              type: integer
+            funding_raised_max:
+              type: integer
+            industry_tags:
+              type: array
+              items:
+                type: string
+            regulatory_stage:
+              type: array
+              items:
+                type: string
+        tags:
+          type: array
+          items:
+            type: string
+        source_url:
+          type: string
+          format: uri
+          description: Official program URL. Always present. Always clickable.
+        url_last_verified:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last HEAD check timestamp
+        url_is_live:
+          type: boolean
+          description: False if URL returned 404 in weekly check
+        url_status_code:
+          type: integer
+          nullable: true
+          description: HTTP status from last check
+        metadata_json:
+          type: object
+          nullable: true
+        last_synced_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    GrantMatchResult:
+      type: object
+      required: [grant, confidence, why_you_qualify]
+      properties:
+        grant:
+          $ref: '#/components/schemas/Grant'
+        confidence:
+          type: string
+          enum: [strong, partial, informational]
+        why_you_qualify:
+          type: string
+          description: Human-readable explanation tailored to user profile
+        deadline_warning:
+          type: string
+          nullable: true
+          description: e.g. "Due in 7 days"
+
+    GrantMatchResponse:
+      type: object
+      required: [matches, profile_completeness, from_cache]
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrantMatchResult'
+          maxItems: 20
+        total_eligible:
+          type: integer
+          description: Total count matching hard filters (before scoring)
+        profile_completeness:
+          type: number
+          minimum: 0
+          maximum: 1
+        from_cache:
+          type: boolean
+        cache_ttl_seconds:
+          type: integer
+          nullable: true
+
+    GrantDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/Grant'
+        - type: object
+          properties:
+            eligibility_for_user:
+              type: object
+              nullable: true
+              properties:
+                passes_hard:
+                  type: boolean
+                matched_criteria:
+                  type: array
+                  items:
+                    type: string
+                missing_criteria:
+                  type: array
+                  items:
+                    type: string
+            common_pitfalls:
+              type: array
+              nullable: true
+              items:
+                type: string
+            next_steps:
+              type: array
+              nullable: true
+              items:
+                type: string
+
+    TrackGrantRequest:
+      type: object
+      required: [grant_id]
+      properties:
+        grant_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          default: saved
+          enum: [saved, interested, started, applied, submitted, under_review, accepted, awarded, rejected, reconsidering, dismissed, abandoned, archived]
+        notes:
+          type: string
+          nullable: true
+
+    DismissGrantRequest:
+      type: object
+      required: [grant_id, reason]
+      properties:
+        grant_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          enum: [not_enough_money, wrong_category, deadline_too_soon, already_applied, unspecified]
+        custom_reason:
+          type: string
+          nullable: true
+
+    GrantDismissed:
+      type: object
+      required: [id, user_id, grant_id, reason, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        grant_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        custom_reason:
+          type: string
+          nullable: true
+        conversation_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ─── Grant Lifecycle ────────────────────────────────────────────────────
+
+    GrantLifecycle:
+      type: object
+      required: [id, user_id, grant_id, status, attempt_number, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        grant_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [discovered, saved, interested, started, applied, submitted, under_review, accepted, awarded, rejected, reconsidering, dismissed, abandoned, archived]
+        previous_status:
+          type: string
+          nullable: true
+        attempt_number:
+          type: integer
+          minimum: 1
+        saved_at:
+          type: string
+          format: date-time
+          nullable: true
+        interested_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        applied_at:
+          type: string
+          format: date-time
+          nullable: true
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        under_review_at:
+          type: string
+          format: date-time
+          nullable: true
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        awarded_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejected_at:
+          type: string
+          format: date-time
+          nullable: true
+        reconsidering_at:
+          type: string
+          format: date-time
+          nullable: true
+        dismissed_at:
+          type: string
+          format: date-time
+          nullable: true
+        abandoned_at:
+          type: string
+          format: date-time
+          nullable: true
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+        expected_decision_date:
+          type: string
+          format: date
+          nullable: true
+        award_amount_usd:
+          type: integer
+          nullable: true
+        award_terms:
+          type: string
+          nullable: true
+        rejection_reason:
+          type: string
+          nullable: true
+        feedback_notes:
+          type: string
+          nullable: true
+        dismissal_reason:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LifecycleTransitionRequest:
+      type: object
+      required: [to_status]
+      properties:
+        to_status:
+          type: string
+          enum: [saved, interested, started, applied, submitted, under_review, accepted, awarded, rejected, reconsidering, dismissed, abandoned, archived]
+        trigger_type:
+          type: string
+          enum: [user_action, agent_inference, time_based, auto]
+          default: user_action
+        notes:
+          type: string
+          nullable: true
+        award_amount_usd:
+          type: integer
+          nullable: true
+        rejection_reason:
+          type: string
+          nullable: true
+
+    LifecycleTransition:
+      type: object
+      required: [id, lifecycle_id, from_status, to_status, trigger_type, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        lifecycle_id:
+          type: string
+          format: uuid
+        from_status:
+          type: string
+        to_status:
+          type: string
+        trigger_type:
+          type: string
+          enum: [user_action, agent_inference, time_based, auto]
+        trigger_detail:
+          type: string
+          nullable: true
+        conversation_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    PaginatedGrantLifecycles:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/GrantLifecycle'
+
+    PaginatedLifecycleTransitions:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/LifecycleTransition'
+
+    # ─── Alerts ─────────────────────────────────────────────────────────────
+
+    Alert:
+      type: object
+      required: [id, user_id, alert_type, message_preview, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        grant_id:
+          type: string
+          format: uuid
+          nullable: true
+        lifecycle_id:
+          type: string
+          format: uuid
+          nullable: true
+        alert_type:
+          type: string
+          enum: [new_grant_match, deadline_approaching, deadline_imminent, deadline_passed, review_halfway, decision_expected, decision_overdue, reconsideration_window, no_activity, grant_updated, profile_change_unlock, re_engagement]
+        message_preview:
+          type: string
+        rich_payload:
+          type: object
+          nullable: true
+        status:
+          type: string
+          enum: [pending, sent, dismissed, acted]
+        dismissed_reason:
+          type: string
+          nullable: true
+        scheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PaginatedAlerts:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Alert'
+
+    # ─── Skills ─────────────────────────────────────────────────────────────
+
+    Skill:
+      type: object
+      required: [id, slug, name, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          enum: [grants, competitor_tracking, investor_matching, regulatory_planning, team_hiring, lab_access, legal_ip]
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, beta, live, deprecated]
+        required_profile_fields:
+          type: array
+          items:
+            type: string
+        config_json:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ─── Users ──────────────────────────────────────────────────────────────
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_name:
+          type: string
+          nullable: true
+        incorporation_type:
+          type: string
+          nullable: true
+          enum: ["delaware_c_corp", "llc", "other"]
+        incorporation_country:
+          type: string
+          nullable: true
+        industry_tags:
+          type: array
+          items:
+            type: string
+        product_type:
+          type: string
+          nullable: true
+          enum: ["device", "drug", "diagnostic", "software", "other"]
+        therapeutic_area:
+          type: string
+          nullable: true
+        data_status:
+          type: string
+          nullable: true
+          enum: ["benchtop", "glp", "clinical", "fda_cleared"]
+        stage:
+          type: string
+          nullable: true
+          enum: ["idea", "prototype", "pilot", "revenue", "scaling"]
+        location:
+          type: object
+          nullable: true
+          properties:
+            city:
+              type: string
+            state:
+              type: string
+            country:
+              type: string
+        monthly_burn_usd:
+          type: integer
+          nullable: true
+        runway_months:
+          type: integer
+          nullable: true
+        last_raise_amount_usd:
+          type: integer
+          nullable: true
+        last_raise_date:
+          type: string
+          format: date
+          nullable: true
+        capital_need_12m_usd:
+          type: integer
+          nullable: true
+        team_size:
+          type: integer
+          nullable: true
+        team_roles:
+          type: array
+          items:
+            type: string
+        years_in_business:
+          type: number
+          nullable: true
+        regulatory_pathway:
+          type: string
+          nullable: true
+          enum: ["510k", "pma", "denovo", "de-novo", "exempt", "ce_mark"]
+        has_ip_license:
+          type: boolean
+          nullable: true
+        prior_sbir_awards:
+          type: integer
+          nullable: true
+        sbir_eligible:
+          type: boolean
+          nullable: true
+        minimum_grant_size_usd:
+          type: integer
+          nullable: true
+        geographic_scope:
+          type: string
+          nullable: true
+          enum: ["us_only", "uk", "eu", "multi_region"]
+        alert_frequency:
+          type: string
+          nullable: true
+          enum: ["daily", "weekly", "never"]
+        profile_json:
+          type: object
+          description: Catch-all for fields not yet promoted to columns
+        completeness_score:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        company_name:
+          type: string
+          nullable: true
+        incorporation_type:
+          type: string
+          nullable: true
+        incorporation_country:
+          type: string
+          nullable: true
+        industry_tags:
+          type: array
+          items:
+            type: string
+        product_type:
+          type: string
+          nullable: true
+        therapeutic_area:
+          type: string
+          nullable: true
+        data_status:
+          type: string
+          nullable: true
+        stage:
+          type: string
+          nullable: true
+        location_city:
+          type: string
+          nullable: true
+        location_state:
+          type: string
+          nullable: true
+        location_country:
+          type: string
+          nullable: true
+        monthly_burn_usd:
+          type: integer
+          nullable: true
+        runway_months:
+          type: integer
+          nullable: true
+        last_raise_amount_usd:
+          type: integer
+          nullable: true
+        last_raise_date:
+          type: string
+          format: date
+          nullable: true
+        capital_need_12m_usd:
+          type: integer
+          nullable: true
+        team_size:
+          type: integer
+          nullable: true
+        team_roles:
+          type: array
+          items:
+            type: string
+        years_in_business:
+          type: number
+          nullable: true
+        regulatory_pathway:
+          type: string
+          nullable: true
+        has_ip_license:
+          type: boolean
+          nullable: true
+        prior_sbir_awards:
+          type: integer
+          nullable: true
+        sbir_eligible:
+          type: boolean
+          nullable: true
+        minimum_grant_size_usd:
+          type: integer
+          nullable: true
+        geographic_scope:
+          type: string
+          nullable: true
+        alert_frequency:
+          type: string
+          nullable: true
+        profile_json:
+          type: object
+          nullable: true
+          description: Partial merge — keys override existing, null values delete
+
+    UserProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/UserProfile'
+        - type: object
+          properties:
+            grants_tracking_count:
+              type: integer
+            grants_dismissed_count:
+              type: integer
+            alerts_pending_count:
+              type: integer
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    UserPreferences:
+      type: object
+      properties:
+        proactive_frequency:
+          type: string
+          enum: [daily, weekly, biweekly, never]
+        notification_channel:
+          type: string
+          enum: [in_app, email, telegram]
+        email_enabled:
+          type: boolean
+        telegram_handle:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          default: America/New_York
+        minimum_grant_size_usd:
+          type: integer
+          nullable: true
+
+    UpdatePreferencesRequest:
+      type: object
+      properties:
+        proactive_frequency:
+          type: string
+          enum: [daily, weekly, biweekly, never]
+        notification_channel:
+          type: string
+          enum: [in_app, email, telegram]
+        email_enabled:
+          type: boolean
+        telegram_handle:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+        minimum_grant_size_usd:
+          type: integer
+          nullable: true
+
+    # ─── Auth ───────────────────────────────────────────────────────────────
+
+    SessionMergeResponse:
+      type: object
+      required: [user_id, merged, conversations_migrated, grants_migrated]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        merged:
+          type: boolean
+        conversations_migrated:
+          type: integer
+        messages_migrated:
+          type: integer
+        grants_migrated:
+          type: integer
+        profile_merged:
+          type: boolean
+
+    # ─── Health ─────────────────────────────────────────────────────────────
+
+    HealthCheck:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+
+    DeepHealthCheck:
+      allOf:
+        - $ref: '#/components/schemas/HealthCheck'
+        - type: object
+          properties:
+            dependencies:
+              type: object
+              properties:
+                database:
+                  type: string
+                  enum: [ok, degraded, down]
+                redis:
+                  type: string
+                  enum: [ok, degraded, down]
+                llm_api:
+                  type: string
+                  enum: [ok, degraded, down]
+                supabase:
+                  type: string
+                  enum: [ok, degraded, down]
+                clerk:
+                  type: string
+                  enum: [ok, degraded, down]
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Invalid or missing Clerk JWT
+
+    Forbidden:
+      description: Authenticated but not authorized for this resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: FORBIDDEN
+              message: You do not have access to this conversation
+
+    ValidationError:
+      description: Request body validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Request validation failed
+              detail:
+                fields:
+                  text: "Field required"
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until retry is allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: RATE_LIMIT_EXCEEDED
+              message: Rate limit exceeded. Retry after 30s.
+
+    GrantNotFound:
+      description: Grant not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: GRANT_NOT_FOUND
+              message: Grant not found
+              detail:
+                grant_id: "..."
+
+    GrantLifecycleNotFound:
+      description: Grant lifecycle record not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: LIFECYCLE_NOT_FOUND
+              message: Grant lifecycle record not found
+
+    ConversationNotFound:
+      description: Conversation not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: CONVERSATION_NOT_FOUND
+              message: Conversation not found
+
+    JobNotFound:
+      description: Chat stream job not found or expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+    AlertNotFound:
+      description: Alert not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+# ─── Tag Organization ───────────────────────────────────────────────────────
+
+tags:
+  - name: Chat
+    description: Conversational messaging — send messages, stream responses, manage conversations
+  - name: Grants
+    description: Grant discovery, matching, tracking, deep dive, and lifecycle management
+  - name: Alerts
+    description: Proactive alert management and dismissals
+  - name: Auth
+    description: Authentication — magic links, OAuth, session merge, password reset, email verification
+  - name: Users
+    description: General-purpose founder profile and preferences management
+  - name: Skills
+    description: "Skill plugin registry (v1: grants only)"
+  - name: System
+    description: Health checks and webhook receivers

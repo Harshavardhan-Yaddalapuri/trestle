@@ -1,0 +1,543 @@
+[
+  {
+    "source": "NIH SBIR",
+    "source_id": "PA-24-245",
+    "name": "NIH SBIR Phase I (Parent, Clinical Trial Not Allowed)",
+    "description": "Omnibus solicitation for Small Business Innovation Research Phase I grants from NIH, CDC, and FDA. Supports early-stage R&D to establish technical merit and feasibility of proposed innovations across all biomedical and behavioral research areas. No clinical trials allowed under this parent announcement. Phase I awards are typically 6-12 months.",
+    "amount_min_usd": 150000,
+    "amount_max_usd": 314363,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "primary_pi_employment": "must_be_employed_by_sbc",
+      "work_performed_in_us": true,
+      "stage": ["benchtop", "glp", "preclinical"],
+      "therapeutic_areas": ["all_biomedical", "behavioral", "health_it"],
+      "sbir_phases": ["phase_i"],
+      "prior_awards": "no_limit_phase_i"
+    },
+    "tags": ["sbir", "nih", "phase_i", "r43", "feasibility", "early_stage"],
+    "source_url": "https://grants.nih.gov/grants/guide/pa-files/PA-24-245.html",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "R43/R44",
+      "application_due_dates": ["2025-09-05", "2026-01-05", "2026-04-05"],
+      "award_terms": "Phase I: typically 6-12 months; Phase II: up to 2 years",
+      "requires_cost_sharing": false
+    }
+  },
+  {
+    "source": "NIH SBIR",
+    "source_id": "PA-24-246",
+    "name": "NIH SBIR Phase I (Parent, Clinical Trial Required)",
+    "description": "Omnibus SBIR Phase I solicitation for projects that include at least one clinical trial. Supports small businesses developing interventions ready for initial human testing. Covers devices, drugs, biologics, and diagnostics requiring clinical validation.",
+    "amount_min_usd": 200000,
+    "amount_max_usd": 314363,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "requires_clinical_trial": true,
+      "work_performed_in_us": true,
+      "stage": ["clinical", "fda_cleared"],
+      "therapeutic_areas": ["all_biomedical"],
+      "sbir_phases": ["phase_i"],
+      "regulatory_pathways": ["510k", "pma", "denovo", "de-novo"]
+    },
+    "tags": ["sbir", "nih", "phase_i", "clinical_trial", "r43", "devices", "drugs"],
+    "source_url": "https://grants.nih.gov/grants/guide/pa-files/PA-24-246.html",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "R43/R44",
+      "application_due_dates": ["2025-09-05", "2026-01-05", "2026-04-05"],
+      "requires_human_subjects": true
+    }
+  },
+  {
+    "source": "NIH SBIR",
+    "source_id": "PA-24-247",
+    "name": "NIH STTR Phase I (Parent, Clinical Trial Not Allowed)",
+    "description": "Small Business Technology Transfer Phase I grants requiring formal collaboration between a small business and a non-profit research institution. The small business must perform at least 40% of the work and the research institution at least 30%. Excellent for academic spinouts.",
+    "amount_min_usd": 150000,
+    "amount_max_usd": 314363,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "requires_research_partner": true,
+      "research_partner_min_pct": 30,
+      "small_business_min_pct": 40,
+      "work_performed_in_us": true,
+      "stage": ["benchtop", "glp", "preclinical"],
+      "sbir_phases": ["phase_i", "sttr"]
+    },
+    "tags": ["sttr", "nih", "phase_i", "r41", "academic_partner", "tech_transfer"],
+    "source_url": "https://grants.nih.gov/grants/guide/pa-files/PA-24-247.html",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "R41/R42",
+      "application_due_dates": ["2025-09-05", "2026-01-05", "2026-04-05"]
+    }
+  },
+  {
+    "source": "NIH NCI",
+    "source_id": "NCI-SBIR-P2-BRIDGE",
+    "name": "NCI SBIR Phase IIB Bridge Award",
+    "description": "National Cancer Institute bridge funding for SBIR Phase II awardees requiring additional support to reach commercialization. Provides up to $4M in total Phase IIB funding over 3 years. Requires matching third-party investor funds equal to or exceeding the NCI contribution.",
+    "amount_min_usd": 1000000,
+    "amount_max_usd": 4000000,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "requires_prior_nih_sbir": true,
+      "prior_phase": "phase_ii_completed_or_active",
+      "requires_matching_funds": true,
+      "matching_funds_pct": 50,
+      "therapeutic_areas": ["oncology", "cancer_diagnostics", "cancer_therapeutics"],
+      "sbir_phases": ["phase_iib"],
+      "stage": ["clinical"]
+    },
+    "tags": ["sbir", "nci", "phase_iib", "bridge_award", "oncology", "commercialization"],
+    "source_url": "https://sbir.cancer.gov/funding/contracts/",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR Phase IIB Contract",
+      "max_duration_months": 36,
+      "matching_requirement": "Third-party investor funds"
+    }
+  },
+  {
+    "source": "NSF SBIR",
+    "source_id": "NSF-24-579",
+    "name": "NSF SBIR/STTR Phase I",
+    "description": "National Science Foundation's flagship seed fund for deep-tech startups. Provides non-dilutive funding for proof-of-concept development across all scientific and engineering disciplines. Requires submission of a Project Pitch before full proposal invitation. Phase I awards up to $305K for 6-12 months.",
+    "amount_min_usd": 50000,
+    "amount_max_usd": 305000,
+    "deadline": "2026-03-04",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "work_performed_in_us": true,
+      "requires_project_pitch": true,
+      "stage": ["benchtop", "glp", "concept"],
+      "technology_readiness": "tr1_to_tr4",
+      "equity_structure": "no_vc_majority_ownership"
+    },
+    "tags": ["sbir", "nsf", "phase_i", "deep_tech", "non_dilutive", "proof_of_concept"],
+    "source_url": "https://new.nsf.gov/funding/opportunities/nsf-small-business-innovation-research-small-business-technology",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR/STTR Grant",
+      "max_duration_months": 12,
+      "project_pitch_required": true,
+      "solicitation_number": "NSF 24-579"
+    }
+  },
+  {
+    "source": "NSF SBIR",
+    "source_id": "NSF-24-580",
+    "name": "NSF SBIR/STTR Phase II",
+    "description": "Second phase NSF seed fund for Phase I awardees. Supports continued R&D toward commercialization. Awards up to $1M for 24 months. Only open to companies that have completed an NSF Phase I award.",
+    "amount_min_usd": 500000,
+    "amount_max_usd": 1000000,
+    "deadline": "2026-03-04",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "requires_prior_nsf_phase_i": true,
+      "work_performed_in_us": true,
+      "stage": ["glp", "preclinical"],
+      "technology_readiness": "tr3_to_tr6"
+    },
+    "tags": ["sbir", "nsf", "phase_ii", "deep_tech", "non_dilutive", "scale_up"],
+    "source_url": "https://new.nsf.gov/funding/opportunities/nsf-small-business-innovation-research-small-business-technology-0",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR/STTR Grant",
+      "max_duration_months": 24,
+      "solicitation_number": "NSF 24-580",
+      "prerequisite": "NSF Phase I completion"
+    }
+  },
+  {
+    "source": "BARDA DRIVe",
+    "source_id": "EZ-BAA-22-100-SOL-00003",
+    "name": "BARDA DRIVe EZ-BAA (Easy Broad Agency Announcement)",
+    "description": "BARDA's Division of Research, Innovation, and Ventures (DRIVe) Easy BAA provides funding for early-stage companies developing transformative medical countermeasures. Open rolling submission. Phase I awards up to $750K; Phase II (EZ-BAA+) up to $20M. Focus areas include pandemic preparedness, digital health, and antimicrobial resistance.",
+    "amount_min_usd": 200000,
+    "amount_max_usd": 20000000,
+    "deadline": "2027-10-18",
+    "status": "rolling",
+    "eligibility_rules": {
+      "company_type": "any_responsible_source",
+      "international": true,
+      "resource_contribution_pct": 30,
+      "stage": ["benchtop", "glp", "preclinical", "clinical"],
+      "therapeutic_areas": ["pandemic_preparedness", "antimicrobial_resistance", "digital_health_mcm", "biodefense"],
+      "product_types": ["device", "drug", "diagnostic", "software"],
+      "profit_structure": "accepts_international_entities"
+    },
+    "tags": ["barda", "drive", "ez-baa", "medical_countermeasures", "pandemic", "biodefense", "rolling"],
+    "source_url": "https://drive.hhs.gov/ezbaa.html",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Contract or Other Transaction Agreement",
+      "announcement_number": "BAA-22-100-SOL-00003",
+      "min_cost_share_pct": 30,
+      "phase_i_max": 750000,
+      "phase_plus_max": 20000000,
+      "open_until": "2027-10-18"
+    }
+  },
+  {
+    "source": "NIH NIAID",
+    "source_id": "NIAID-DAIT-SBIR-2025",
+    "name": "NIAID SBIR Phase II — Adjuvant Development & Vaccine Technologies",
+    "description": "NIAID Division of Allergy, Immunology, and Transplantation SBIR Phase II for companies developing vaccine adjuvants and delivery platforms. Supports advanced development of vaccine technologies targeting infectious diseases and immune disorders. Up to $3M over 3 years.",
+    "amount_min_usd": 1000000,
+    "amount_max_usd": 3000000,
+    "deadline": "2026-05-07",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "requires_prior_phase_i": true,
+      "therapeutic_areas": ["infectious_disease", "immunology", "vaccines"],
+      "product_types": ["drug", "device"],
+      "sbir_phases": ["phase_ii"]
+    },
+    "tags": ["sbir", "niaid", "phase_ii", "vaccines", "adjuvants", "immunology", "infectious_disease"],
+    "source_url": "https://www.niaid.nih.gov/grants-contracts/sbir-sttr-funding",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR Grant",
+      "max_duration_months": 36,
+      "nofo_type": "targeted"
+    }
+  },
+  {
+    "source": "Gates Foundation",
+    "source_id": "GF-GRAND-CHALLENGES-2025",
+    "name": "Grand Challenges: Innovations for Gram-Negative Antibiotic Discovery (Gr-ADI)",
+    "description": "Joint initiative by the Gates Foundation, Novo Nordisk Foundation, and Wellcome to fund early-stage antibiotic discovery targeting Gram-negative pathogens, specifically Klebsiella spp. Projects up to 3 years with max $5M total funding. High-risk, innovative approaches prioritized.",
+    "amount_min_usd": 500000,
+    "amount_max_usd": 5000000,
+    "deadline": "2026-06-30",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "any_entity",
+      "international": true,
+      "therapeutic_areas": ["antimicrobial_resistance", "infectious_disease", "gram_negative"],
+      "product_types": ["drug"],
+      "stage": ["benchtop", "glp", "preclinical"],
+      "company_size": "any",
+      "requires_global_health_relevance": true
+    },
+    "tags": ["gates_foundation", "grand_challenges", "amr", "antibiotics", "gram_negative", "global_health"],
+    "source_url": "https://gcgh.grandchallenges.org/challenge/innovations-gram-negative-antibiotic-discovery-gr-adi",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Grant",
+      "max_duration_months": 36,
+      "partners": ["Novo Nordisk Foundation", "Wellcome"],
+      "total_funding_pool": "competitive"
+    }
+  },
+  {
+    "source": "PCORI",
+    "source_id": "PCORI-METHODS-CYCLE3-2025",
+    "name": "PCORI Improving Methods for Conducting Patient-Centered CER — Cycle 3 2025",
+    "description": "Patient-Centered Outcomes Research Institute funding for methodological research that advances comparative clinical effectiveness research. Priority areas include AI/ML in clinical research, study design improvements, and data research networks. Up to $750K direct costs, up to 3 years.",
+    "amount_min_usd": 250000,
+    "amount_max_usd": 750000,
+    "deadline": "2026-06-10",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "any_us_entity",
+      "international_limit": "us_or_us_territories",
+      "requires_patient_engagement": true,
+      "stage": ["clinical", "fda_cleared"],
+      "methodology_focus": true,
+      "therapeutic_areas": ["any", "comparative_effectiveness"],
+      "product_types": ["software", "diagnostic"]
+    },
+    "tags": ["pcori", "methods", "cer", "ai_ml", "patient_centered", "data_networks", "health_it"],
+    "source_url": "https://www.pcori.org/funding-opportunities/announcement/improving-methods-conducting-patient-centered-comparative-clinical-effectiveness-research-pcori-funding-announcement-cycle-3-2025",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Grant",
+      "max_duration_months": 36,
+      "pfa_number": "Methods-PFA-Cycle-3-2025",
+      "letter_of_intent_required": true
+    }
+  },
+  {
+    "source": "PCORI",
+    "source_id": "PCORI-BPS-CYCLE3-2025",
+    "name": "PCORI Broad Pragmatic Studies — Cycle 3 2025",
+    "description": "High-impact patient-centered comparative clinical effectiveness research (CER) projects. Three categories: up to $5M, $5-12M, and PCORnet studies up to $12M. Total funding pool of approximately $120M. Special areas of emphasis include maternal sleep health and Alzheimer's disease mental health.",
+    "amount_min_usd": 5000000,
+    "amount_max_usd": 12000000,
+    "deadline": "2026-09-03",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "any_us_entity",
+      "requires_patient_engagement": true,
+      "stage": ["clinical", "fda_cleared"],
+      "minimum_team_experience": "proven_cer_track_record",
+      "therapeutic_areas": ["any", "maternal_health", "alzheimers", "mental_health"],
+      "study_design": ["pragmatic_trial", "observational", "pcor"]
+    },
+    "tags": ["pcori", "pragmatic_studies", "cer", "large_scale", "patient_centered", "maternal_health", "alzheimers"],
+    "source_url": "https://www.pcori.org/funding-opportunities/announcement/broad-pragmatic-studies-pcori-funding-announcement-cycle-3-2025",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Grant",
+      "total_funding_pool_usd": 120000000,
+      "max_duration_months": 60,
+      "letter_of_intent_required": true
+    }
+  },
+  {
+    "source": "NIH NIBIB",
+    "source_id": "NIBIB-SBIR-P1-DIAGNOSTICS",
+    "name": "NIBIB SBIR Phase I — Point-of-Care Diagnostics & Digital Health",
+    "description": "NIBIB targeted SBIR Phase I for innovative point-of-care diagnostic devices and digital health platforms. Supports development and initial validation of novel biosensing technologies, mobile health tools, and AI-assisted diagnostic systems.",
+    "amount_min_usd": 150000,
+    "amount_max_usd": 314363,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "product_types": ["diagnostic", "device", "software"],
+      "therapeutic_areas": ["point_of_care", "digital_health", "diagnostics", "biosensing"],
+      "sbir_phases": ["phase_i"],
+      "stage": ["benchtop", "glp"]
+    },
+    "tags": ["sbir", "nibib", "phase_i", "diagnostics", "digital_health", "point_of_care", "biosensing"],
+    "source_url": "https://www.nibib.nih.gov/research-funding/sbirsttr",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR Grant",
+      "max_duration_months": 12
+    }
+  },
+  {
+    "source": "Michigan MEDC",
+    "source_id": "MEDC-MTRAC-2025",
+    "name": "Michigan Translational Research and Commercialization (MTRAC) Innovation Hub",
+    "description": "State of Michigan program providing funding and mentorship for translational research projects with commercial potential. Supports Michigan-based universities and their spinout companies. Life sciences, advanced computing, advanced materials, and AgBio hubs. Funding up to $100K for early-stage translation.",
+    "amount_min_usd": 25000,
+    "amount_max_usd": 100000,
+    "deadline": null,
+    "status": "rolling",
+    "eligibility_rules": {
+      "location_state": "Michigan",
+      "location_country": "US",
+      "requires_university_affiliation": true,
+      "company_type": ["university_spinout", "michigan_startup"],
+      "stage": ["benchtop", "concept", "glp"],
+      "therapeutic_areas": ["life_sciences", "medical_device", "biotech"],
+      "company_age_months_max": 48
+    },
+    "tags": ["michigan", "medc", "mtrac", "translational", "university_spinout", "early_stage", "biotech"],
+    "source_url": "https://www.michiganbusiness.org/services/mtrac/",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Grant",
+      "program_type": "Translational Research",
+      "hubs": ["Life Sciences", "Advanced Computing", "Advanced Materials"]
+    }
+  },
+  {
+    "source": "Michigan MEDC",
+    "source_id": "MEDC-MBD-2025",
+    "name": "Michigan Business Development Program (MBDP) Performance-Based Grant",
+    "description": "State of Michigan performance-based grants for businesses creating jobs and investing in Michigan. Medtech/biotech companies creating high-wage jobs may qualify. Awards tied to job creation and capital investment milestones. Up to $1.5M.",
+    "amount_min_usd": 100000,
+    "amount_max_usd": 1500000,
+    "deadline": null,
+    "status": "rolling",
+    "eligibility_rules": {
+      "location_state": "Michigan",
+      "location_country": "US",
+      "company_type": "any_michigan_business",
+      "minimum_job_creation": 5,
+      "minimum_capital_investment_usd": 500000,
+      "wage_requirement": "at_or_above_regional_median",
+      "stage": ["any"]
+    },
+    "tags": ["michigan", "medc", "business_development", "job_creation", "performance_based", "expansion"],
+    "source_url": "https://www.michiganbusiness.org/services/mbdp/",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Performance-Based Grant",
+      "tied_to": ["job_creation", "capital_investment"]
+    }
+  },
+  {
+    "source": "NIH NCATS",
+    "source_id": "NCATS-SBIR-P1-RARE",
+    "name": "NCATS SBIR Phase I — Rare Diseases Therapeutics & Diagnostics",
+    "description": "National Center for Advancing Translational Sciences SBIR Phase I for rare disease therapeutic and diagnostic development. Supports projects addressing diseases affecting fewer than 200,000 people in the US. Emphasis on repurposing existing compounds and novel platform technologies.",
+    "amount_min_usd": 150000,
+    "amount_max_usd": 314363,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "therapeutic_areas": ["rare_disease", "orphan_drug"],
+      "product_types": ["drug", "diagnostic", "device"],
+      "sbir_phases": ["phase_i"],
+      "stage": ["benchtop", "glp", "preclinical"]
+    },
+    "tags": ["sbir", "ncats", "phase_i", "rare_disease", "orphan_drug", "therapeutics"],
+    "source_url": "https://ncats.nih.gov/sbir-sttr/funding",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR Grant",
+      "max_duration_months": 12,
+      "rare_disease_definition": "affects <200,000 in US"
+    }
+  },
+  {
+    "source": "NIH NHLBI",
+    "source_id": "NHLBI-SBIR-P2-CARDIO",
+    "name": "NHLBI SBIR Phase II — Cardiovascular & Pulmonary Device Technologies",
+    "description": "National Heart, Lung, and Blood Institute SBIR Phase II for cardiovascular and pulmonary device technologies. Supports advanced development, regulatory preparation, and clinical validation of novel devices addressing heart, lung, blood, and sleep disorders. Phase II awards up to $2.1M over 2 years.",
+    "amount_min_usd": 1000000,
+    "amount_max_usd": 2095748,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "requires_prior_phase_i": true,
+      "therapeutic_areas": ["cardiovascular", "pulmonary", "hematology", "sleep_disorders"],
+      "product_types": ["device", "diagnostic"],
+      "sbir_phases": ["phase_ii"],
+      "regulatory_pathways": ["510k", "pma", "denovo"]
+    },
+    "tags": ["sbir", "nhlbi", "phase_ii", "cardiovascular", "medical_device", "pulmonary", "regulatory"],
+    "source_url": "https://www.nhlbi.nih.gov/grants-and-training/funding-opportunities-and-contacts/small-business-program",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR Grant",
+      "max_duration_months": 24
+    }
+  },
+  {
+    "source": "Gates Foundation",
+    "source_id": "GF-GRAND-CHALLENGES-MCH-NUTRIENTS",
+    "name": "Grand Challenges: Low-Cost Maternal and Child Nutrient Ingredients & Products",
+    "description": "Gates Foundation Grand Challenges grant for development of innovative, exceptionally low-cost nutrient ingredients and products for maternal and child health in low-resource settings. Supports formulation science, novel delivery systems, and scalable manufacturing approaches.",
+    "amount_min_usd": 100000,
+    "amount_max_usd": 500000,
+    "deadline": "2026-12-16",
+    "status": "upcoming",
+    "eligibility_rules": {
+      "company_type": "any_entity",
+      "international": true,
+      "therapeutic_areas": ["maternal_health", "child_health", "nutrition", "global_health"],
+      "product_types": ["drug", "device"],
+      "requires_lmic_applicability": true,
+      "requires_cost_effectiveness": true,
+      "stage": ["benchtop", "glp", "concept"]
+    },
+    "tags": ["gates_foundation", "grand_challenges", "maternal_health", "child_health", "nutrition", "global_health"],
+    "source_url": "https://gcgh.grandchallenges.org/challenge/accelerating-development-innovative-exceptionally-low-cost-maternal-and-child",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Grant",
+      "max_duration_months": 24
+    }
+  },
+  {
+    "source": "NIH NINDS",
+    "source_id": "NINDS-SBIR-P1-NEURO",
+    "name": "NINDS SBIR Phase I — Neurological Disorders Diagnostics & Digital Biomarkers",
+    "description": "National Institute of Neurological Disorders and Stroke SBIR Phase I for digital biomarkers, neurodiagnostics, and neuromodulation technologies. Supports development of novel tools for diagnosis, monitoring, and treatment of neurological conditions including Alzheimer's, Parkinson's, stroke, and TBI.",
+    "amount_min_usd": 150000,
+    "amount_max_usd": 314363,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "therapeutic_areas": ["neurology", "alzheimers", "parkinsons", "stroke", "tbi", "neurodegenerative"],
+      "product_types": ["diagnostic", "device", "software"],
+      "sbir_phases": ["phase_i"],
+      "stage": ["benchtop", "glp", "concept"]
+    },
+    "tags": ["sbir", "ninds", "phase_i", "neurology", "digital_biomarkers", "neurodiagnostics", "alzheimers"],
+    "source_url": "https://www.ninds.nih.gov/funding/small-business-grants",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR Grant",
+      "max_duration_months": 12
+    }
+  },
+  {
+    "source": "FDA",
+    "source_id": "FDA-SBIR-P1-REGSCI",
+    "name": "FDA SBIR Phase I — Regulatory Science & MedTech Innovation",
+    "description": "FDA-specific SBIR Phase I for regulatory science tools and medtech innovations that advance the FDA's regulatory mission. Supports development of novel regulatory science methodologies, in silico modeling, digital health assessment frameworks, and medical device evaluation tools.",
+    "amount_min_usd": 150000,
+    "amount_max_usd": 314363,
+    "deadline": "2026-04-05",
+    "status": "open",
+    "eligibility_rules": {
+      "company_type": "us_small_business",
+      "max_employees": 500,
+      "thematic_focus": "regulatory_science",
+      "product_types": ["software", "device", "diagnostic"],
+      "sbir_phases": ["phase_i"],
+      "stage": ["concept", "benchtop", "glp"],
+      "fda_relevance_required": true
+    },
+    "tags": ["sbir", "fda", "phase_i", "regulatory_science", "medtech", "digital_health", "in_silico"],
+    "source_url": "https://www.fda.gov/science-research/advancing-regulatory-science/small-business-innovation-research-sbir-program",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "SBIR Grant",
+      "max_duration_months": 12,
+      "fda_ic_specific": true
+    }
+  },
+  {
+    "source": "Michigan MEDC",
+    "source_id": "MEDC-MIF-2025",
+    "name": "Michigan Innovation Fund — Entrepreneurial Support & Pitch Competition",
+    "description": "Michigan Innovation Fund entrepreneurial support program and pitch competition for Michigan-based startups. $7.2M allocated for support programs and competitive pitches. Winners receive funding, mentorship, and access to Michigan's SmartZone network of co-working spaces.",
+    "amount_min_usd": 25000,
+    "amount_max_usd": 250000,
+    "deadline": "2026-08-08",
+    "status": "open",
+    "eligibility_rules": {
+      "location_state": "Michigan",
+      "location_country": "US",
+      "company_type": "michigan_startup",
+      "stage": ["concept", "benchtop", "glp", "preclinical"],
+      "company_age_months_max": 60,
+      "requires_pitch_deck": true
+    },
+    "tags": ["michigan", "medc", "innovation_fund", "pitch_competition", "early_stage", "startup"],
+    "source_url": "https://www.michiganbusiness.org/services/michigan-innovation-fund/",
+    "url_is_live": true,
+    "metadata_json": {
+      "funding_mechanism": "Competitive Grant",
+      "total_pool_usd": 7200000,
+      "includes": ["mentorship", "SmartZone_access"]
+    }
+  }
+]

@@ -1,42 +1,83 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+"use client";
 
-export const metadata = {
-  title: "Sign up — Trestle",
-};
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function SignupPage() {
-  return (
-    <div className="min-h-screen bg-surface flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-surface-container-lowest rounded-3xl p-8 border border-outline-variant/40">
-        <h1
-          className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold"
-          style={{ fontSize: "28px", lineHeight: "36px" }}
-        >
-          Sign up
-        </h1>
-        <p className="text-on-surface-variant mt-2 text-sm md:text-base">
-          Placeholder auth page. Wire this to your auth provider when ready.
-        </p>
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-        <div className="mt-8 space-y-3">
-          <Button className="w-full rounded-full font-bold" disabled>
-            Create account
-          </Button>
-          <p className="text-on-surface-variant text-sm">
-            Already have an account?{" "}
-            <Link href="/login" className="text-primary font-medium hover:underline">
-              Login
-            </Link>
-          </p>
-          <p className="text-on-surface-variant text-sm">
-            <Link href="/" className="hover:underline">
-              Back to home
-            </Link>
-          </p>
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) setError(error.message);
+    else router.push("/onboarding");
+    setLoading(false);
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-surface px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl font-bold text-on-surface">Create account</h1>
+          <p className="text-sm text-on-surface-variant">Get started with Trestle</p>
         </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <div className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{error}</div>
+          )}
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="rounded-xl bg-surface-container px-4 py-3 text-sm outline-none ring-1 ring-outline-variant/50 focus:ring-2 focus:ring-primary"
+          />
+          <div className="relative">
+            <input
+              type={showPw ? "text" : "password"}
+              placeholder="Min. 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full rounded-xl bg-surface-container px-4 py-3 text-sm outline-none ring-1 ring-outline-variant/50 focus:ring-2 focus:ring-primary"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw(!showPw)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant"
+            >
+              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-full bg-primary py-3 text-sm font-semibold text-on-primary disabled:opacity-50"
+          >
+            {loading ? "Creating..." : "Create Account"}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-on-surface-variant">
+          Already have an account?{" "}
+          <Link href="/login" className="font-semibold text-primary hover:underline">
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );
 }
-

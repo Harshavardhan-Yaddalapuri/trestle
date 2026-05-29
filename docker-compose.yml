@@ -1,62 +1,51 @@
 services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-trestle}
-      POSTGRES_USER: ${POSTGRES_USER:-trestle}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trestle}
+  backend:
+    build: ./backend
+    container_name: trestle-backend
     ports:
-      - "5432:5432"
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trestle} -d ${POSTGRES_DB:-trestle}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - ./backend:/app
+    networks:
+      - trestle-net
+    depends_on:
+      - redis
+
+  frontend:
+    build: ./frontend
+    container_name: trestle-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - trestle-net
+    depends_on:
+      - backend
 
   redis:
     image: redis:7-alpine
+    container_name: trestle-redis
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    networks:
+      - trestle-net
 
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://trestle:trestle@db:5432/trestle}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app/backend:ro
-    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    ports:
-      - "3000:3000"
-    depends_on:
-      - api
-    volumes:
-      - ./frontend:/app:cached
-      - /app/node_modules
-    command: ["npm", "run", "dev"]
-
-volumes:
-  pgdata:
+networks:
+  trestle-net:
+    driver: bridge
