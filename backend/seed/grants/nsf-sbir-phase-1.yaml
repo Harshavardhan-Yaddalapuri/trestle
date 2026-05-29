@@ -1,0 +1,35 @@
+source_id: nsf-sbir-phase-1
+name: NSF SBIR Phase I
+type: grant
+description: >
+  The National Science Foundation Small Business Innovation Research (SBIR) Phase I
+  program provides non-dilutive funding of up to $275,000 to support exploratory
+  R&D for technology-based small businesses. Phase I establishes technical merit,
+  feasibility, and commercial potential of proposed R&D. Open to US-based small
+  businesses across all technology sectors including deep tech, biotech, and advanced
+  manufacturing.
+url: https://new.nsf.gov/funding/opportunities/sbir-phase-i
+application_url: https://seedfund.nsf.gov/apply/
+amount_min: null
+amount_max: 27500000
+deadline: "2026-09-15"
+rolling: false
+stage:
+  - idea
+  - pre_seed
+  - seed
+industry: null
+location:
+  - US
+eligibility:
+  required_location:
+    - US
+  requires_incorporation: true
+  citizenship: US
+  company_type: small_business
+  max_employees: 500
+  majority_us_owned: true
+  principal_investigator_must_be_employed: true
+provider_name: National Science Foundation
+provider_type: government
+status: active
