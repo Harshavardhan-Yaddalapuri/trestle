@@ -1,0 +1,37 @@
+source_id: mozilla-builders
+name: Mozilla Builders Open Source AI Grant
+type: grant
+description: >
+  Mozilla Builders funds open-source projects building trustworthy AI. Grants
+  range from $50,000 to $250,000 for teams creating AI tools, models, or
+  infrastructure that prioritise transparency, user privacy, and community
+  governance. Projects must commit to open-source licensing. Mozilla looks for
+  work that challenges incumbent AI platforms and puts users in control. Global
+  applicants welcome; projects at any stage considered.
+url: https://builders.mozilla.org
+application_url: https://builders.mozilla.org/apply
+amount_min: 5000000
+amount_max: 25000000
+deadline: "2026-10-31"
+rolling: false
+stage:
+  - any
+industry:
+  - ai
+  - open_source
+  - privacy
+location:
+  - global
+eligibility:
+  required_industry:
+    - ai
+    - open_source
+    - ml
+  open_source_required: true
+  license_options:
+    - Apache-2.0
+    - MPL-2.0
+    - GPL-3.0
+provider_name: Mozilla Foundation
+provider_type: foundation
+status: active

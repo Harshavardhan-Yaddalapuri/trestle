@@ -69,6 +69,22 @@ async def client(session_factory, redis_client) -> AsyncIterator[AsyncClient]:
         yield ac
 
 
+# ── grant seed fixture ────────────────────────────────────────────────────
+
+
+@pytest_asyncio.fixture
+async def seeded_grants(session_factory) -> dict:
+    from pathlib import Path
+
+    from backend.seed.loader import load_grants_from_dir, upsert_grants
+
+    seed_dir = Path(__file__).parent.parent / "seed" / "grants"
+    grants = load_grants_from_dir(seed_dir)
+    async with session_factory() as session:
+        inserted, updated = await upsert_grants(session, grants)
+    return {"inserted": inserted, "updated": updated, "grants": grants}
+
+
 # ── helpers ───────────────────────────────────────────────────────────────
 
 

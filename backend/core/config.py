@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     SESSION_COOKIE_NAME: str = Field(default="trestle_anon_session")
     SESSION_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 30)
 
+    URL_VERIFY_ENABLED: bool = Field(default=True)
+    URL_VERIFY_INTERVAL_HOURS: int = Field(default=168)  # weekly
+    URL_VERIFY_TIMEOUT_SECONDS: float = Field(default=10.0)
+    URL_VERIFY_USER_AGENT: str = Field(default="TrestleBot/1.0 (+https://trestle.dev/bot)")
+    URL_VERIFY_CONCURRENCY: int = Field(default=5)
+    URL_VERIFY_GONE_THRESHOLD: int = Field(default=3)
+    URL_VERIFY_REDIS_LOCK_TTL_SECONDS: int = Field(default=1800)
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, value):
