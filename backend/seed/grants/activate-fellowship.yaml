@@ -1,0 +1,36 @@
+source_id: activate-fellowship
+name: Activate Fellowship
+type: fellowship
+description: >
+  The Activate Fellowship supports scientists and engineers commercialising
+  breakthrough hardware, climate, and energy technologies. Fellows receive
+  two years of salary ($100,000/year), lab access, and business mentorship to
+  transition from research to company formation. Applicants must have a PhD or
+  equivalent research experience and a technology ready for commercial translation.
+  US-based fellows only; team size at application must be 1–3 people.
+url: https://activate.org/fellowship
+application_url: https://activate.org/fellowship/apply
+amount_min: 10000000
+amount_max: 10000000
+deadline: "2026-08-01"
+rolling: false
+stage:
+  - pre_seed
+industry:
+  - hardware
+  - climate
+  - energy
+location:
+  - US
+eligibility:
+  required_stage:
+    - pre_seed
+  required_location:
+    - US
+  min_team_size: 2
+  max_team_size: 3
+  phd_required: true
+  duration_years: 2
+provider_name: Activate
+provider_type: foundation
+status: active

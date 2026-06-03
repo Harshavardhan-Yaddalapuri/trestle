@@ -1,0 +1,34 @@
+source_id: anthropic-academic-grants
+name: Anthropic Academic Research Grants
+type: grant
+description: >
+  Anthropic's Academic Research Grant program funds university researchers
+  working on AI safety, alignment, and interpretability. Grants of $50,000–$200,000
+  support work that advances the science of making AI systems safe, honest, and
+  beneficial. Priority areas include mechanistic interpretability, scalable oversight,
+  robustness, and formal verification of neural networks. Applicants must hold an
+  academic affiliation at an accredited institution. Open to researchers globally.
+url: https://www.anthropic.com/research-grants
+application_url: null
+amount_min: 5000000
+amount_max: 20000000
+deadline: "2026-07-15"
+rolling: false
+stage:
+  - any
+industry:
+  - ai
+  - ai_safety
+  - research
+location:
+  - global
+eligibility:
+  academic_affiliation_required: true
+  priority_areas:
+    - interpretability
+    - scalable_oversight
+    - robustness
+    - formal_verification
+provider_name: Anthropic
+provider_type: corporate
+status: active

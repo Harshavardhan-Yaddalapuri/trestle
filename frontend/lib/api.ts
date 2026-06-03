@@ -125,7 +125,7 @@ export const apiClient = {
   health: () => request<HealthResponse>("/health"),
 
   search: (data: SearchRequest) =>
-    request<SearchResponse>("/api/api/search", {
+    request<SearchResponse>("/api/search", {
       method: "POST",
       body: data,
     }),

@@ -1,0 +1,30 @@
+source_id: yc-w26
+name: Y Combinator Winter 2026 Batch
+type: accelerator
+description: >
+  Y Combinator is the world's top startup accelerator. The W26 batch invests
+  $500,000 for 7% equity and provides three months of intensive mentorship,
+  access to the YC network, and Demo Day exposure to top-tier investors.
+  YC accepts companies from any industry and any geography. Apply anytime —
+  applications are reviewed on a rolling basis with cohort placement on fit.
+url: https://www.ycombinator.com/apply
+application_url: https://apply.ycombinator.com/
+amount_min: 50000000
+amount_max: 50000000
+deadline: null
+rolling: true
+stage:
+  - pre_seed
+  - seed
+industry: null
+location:
+  - global
+eligibility:
+  max_funding_raised_usd: 2000000
+  requires_incorporation: true
+  equity_taken_pct: 7
+  min_founders: 1
+  max_founders: 4
+provider_name: Y Combinator
+provider_type: accelerator
+status: active

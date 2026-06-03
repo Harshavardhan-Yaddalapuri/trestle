@@ -1,0 +1,8 @@
+Generic single-database configuration with an async engine.
+
+Run from the repo root:
+
+    alembic -c backend/alembic.ini revision -m "describe change" --autogenerate
+    alembic -c backend/alembic.ini upgrade head
+
+DATABASE_URL is read from backend.core.config — do not put it in alembic.ini.

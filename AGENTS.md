@@ -28,4 +28,4 @@ The M3 design spec is documented in `docs/design-system.md`. Frontend components
 ### Lint & Test
 
 - Frontend: `cd frontend && npx eslint .`
-- Backend: no test framework configured yet
+- Backend: `cd backend && python -m pytest` (pytest + pytest-asyncio; config in `pyproject.toml` or `pytest.ini`)

@@ -1,18 +1,41 @@
-"""Shared test fixtures for Trestle v1 backend tests."""
+"""Shared test fixtures for Trestle backend tests.
+
+Merged: Supabase mock fixtures (main) + async DB/LLM fixtures (orchestrator).
+"""
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID
+from typing import Any, AsyncIterator
+from unittest.mock import MagicMock, patch
 
 import pytest
+import pytest_asyncio
+from fakeredis import FakeAsyncRedis
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 # Ensure backend is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from backend.db.base import Base
+from backend.db.session import get_db, get_db_factory
+from backend.main import create_app
+from backend.redis_client import get_redis
+from backend.services.llm.dependency import get_llm_client
+from backend.services.llm.fake import FakeLLMClient
+
+
+# ============================================================
+# Supabase mock fixtures (from main)
+# ============================================================
 
 @pytest.fixture(autouse=True)
 def mock_settings_env(monkeypatch):
@@ -26,8 +49,9 @@ def mock_settings_env(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
 
 
-def _make_fresh_mock_supabase():
-    """Create a fresh supabase mock with chainable API."""
+@pytest.fixture
+def mock_supabase():
+    """Return a fully chainable supabase mock."""
     mock = MagicMock()
     mock_execute = MagicMock()
     mock_execute.data = []
@@ -37,149 +61,131 @@ def _make_fresh_mock_supabase():
         return mock
 
     mock.table = MagicMock(side_effect=_chain)
-    mock.select = MagicMock(return_value=mock)
-    mock.insert = MagicMock(return_value=mock)
-    mock.update = MagicMock(return_value=mock)
-    mock.delete = MagicMock(return_value=mock)
-    mock.eq = MagicMock(return_value=mock)
-    mock.neq = MagicMock(return_value=mock)
-    mock.is_ = MagicMock(return_value=mock)
-    mock.limit = MagicMock(return_value=mock)
-    mock.order = MagicMock(return_value=mock)
-    mock.range = MagicMock(return_value=mock)
-    mock.single = MagicMock(return_value=mock)
-    mock.execute = MagicMock(return_value=mock_execute)
-    mock.rpc = MagicMock(return_value=mock_execute)
+    mock.select = MagicMock(side_effect=_chain)
+    mock.insert = MagicMock(side_effect=_chain)
+    mock.update = MagicMock(side_effect=_chain)
+    mock.delete = MagicMock(side_effect=_chain)
+    mock.upsert = MagicMock(side_effect=_chain)
+    mock.eq = MagicMock(side_effect=_chain)
+    mock.neq = MagicMock(side_effect=_chain)
+    mock.gt = MagicMock(side_effect=_chain)
+    mock.lt = MagicMock(side_effect=_chain)
+    mock.gte = MagicMock(side_effect=_chain)
+    mock.lte = MagicMock(side_effect=_chain)
+    mock.like = MagicMock(side_effect=_chain)
+    mock.ilike = MagicMock(side_effect=_chain)
+    mock.is_ = MagicMock(side_effect=_chain)
+    mock.in_ = MagicMock(side_effect=_chain)
+    mock.order = MagicMock(side_effect=_chain)
+    mock.limit = MagicMock(side_effect=_chain)
+    mock.range = MagicMock(side_effect=_chain)
+    mock.single = MagicMock(side_effect=_chain)
+    mock.execute = mock_execute
     return mock
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def mock_supabase_client():
-    """Globally mock the supabase client so no real DB calls are made.
+    """Mock create_client to return a chainable mock."""
+    mock = MagicMock()
+    mock_execute = MagicMock()
+    mock_execute.data = []
+    mock_execute.count = 0
 
-    Patches both the source module AND any module that imported supabase
-    via ``from app.database import supabase`` (which creates a local
-    reference that won't see the source patch).  Each call returns a
-    fresh mock to avoid state leakage across tests.
-
-    Applied AUTOMATICALLY to every test — no test should ever make real
-    Supabase calls. Tests that need specific DB responses configure the
-    mock's return values before executing.
-    """
-    fresh = _make_fresh_mock_supabase()
-    with patch("app.database.supabase", fresh), \
-         patch("app.routers.auth.supabase", fresh), \
-         patch("app.main.supabase", fresh):
-        yield fresh
-
-
-# ─── Auth helpers ────────────────────────────────────────────────────────────
-
-VALID_USER_UUID = UUID("12345678-1234-1234-1234-123456789abc")
-VALID_SUPABASE_UID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-VALID_EMAIL = "test@example.com"
-
-
-@pytest.fixture
-def mock_successful_jwt_verification():
-    """Patch verify_supabase_jwt to return a valid user."""
-    with patch(
-        "app.middleware.auth.verify_supabase_jwt",
-        new_callable=AsyncMock,
-    ) as mock_verify:
-        mock_verify.return_value = (VALID_SUPABASE_UID, VALID_EMAIL)
-        yield mock_verify
-
-
-@pytest.fixture
-def mock_supabase_httpx_signup_success():
-    """Mock httpx.AsyncClient.post for signup returning success."""
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 201
-        mock_resp.json.return_value = {
-            "id": str(VALID_SUPABASE_UID),
-            "email": VALID_EMAIL,
-        }
-        mock_post.return_value = mock_resp
-        yield mock_post
-
-
-@pytest.fixture
-def mock_supabase_httpx_login_success():
-    """Mock httpx.AsyncClient.post for login returning success."""
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "access_token": "fake-access-token",
-            "refresh_token": "fake-refresh-token",
-            "expires_in": 3600,
-            "user": {
-                "id": str(VALID_SUPABASE_UID),
-                "email": VALID_EMAIL,
-            },
-        }
-        mock_post.return_value = mock_resp
-        yield mock_post
-
-
-@pytest.fixture
-def mock_supabase_httpx_magiclink_success():
-    """Mock httpx.AsyncClient.post for magic link sending."""
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {}
-        mock_post.return_value = mock_resp
-        yield mock_post
-
-
-@pytest.fixture(autouse=True)
-def mock_all_httpx():
-    """Mock ALL httpx.AsyncClient methods to prevent actual network calls.
-
-    Applied AUTOMATICALLY to every test. Tests that need SPECIFIC
-    httpx responses (signup, login, magic link) use their own fixtures
-    that override this one via nested patching.
-
-    The default mock returns a generic 200 with a json body that is
-    structured enough to not crash the most common auth endpoints
-    (signup needs ``id``, login needs ``user.id``).
-    """
-    def _make_generic_response():
-        mock = MagicMock()
-        mock.status_code = 200
-        mock.json.return_value = {
-            "id": str(VALID_SUPABASE_UID),
-            "email": VALID_EMAIL,
-            "user": {
-                "id": str(VALID_SUPABASE_UID),
-                "email": VALID_EMAIL,
-            },
-            "access_token": "fake-access-token",
-            "refresh_token": "fake-refresh-token",
-            "expires_in": 3600,
-        }
+    def _chain(*args, **kwargs):
         return mock
 
-    async def mock_post_success(*args, **kwargs):
-        return _make_generic_response()
+    mock.table = MagicMock(side_effect=_chain)
+    mock.select = MagicMock(side_effect=_chain)
+    mock.insert = MagicMock(side_effect=_chain)
+    mock.update = MagicMock(side_effect=_chain)
+    mock.delete = MagicMock(side_effect=_chain)
+    mock.upsert = MagicMock(side_effect=_chain)
+    mock.eq = MagicMock(side_effect=_chain)
+    mock.neq = MagicMock(side_effect=_chain)
+    mock.gt = MagicMock(side_effect=_chain)
+    mock.lt = MagicMock(side_effect=_chain)
+    mock.gte = MagicMock(side_effect=_chain)
+    mock.lte = MagicMock(side_effect=_chain)
+    mock.like = MagicMock(side_effect=_chain)
+    mock.ilike = MagicMock(side_effect=_chain)
+    mock.is_ = MagicMock(side_effect=_chain)
+    mock.in_ = MagicMock(side_effect=_chain)
+    mock.order = MagicMock(side_effect=_chain)
+    mock.limit = MagicMock(side_effect=_chain)
+    mock.range = MagicMock(side_effect=_chain)
+    mock.single = MagicMock(side_effect=_chain)
+    mock.execute = mock_execute
 
-    async def mock_get_success(*args, **kwargs):
-        return _make_generic_response()
-
-    with patch("httpx.AsyncClient.post", new=mock_post_success), \
-         patch("httpx.AsyncClient.get", new=mock_get_success):
-        yield
+    with patch("app.services.supabase.create_client", return_value=mock):
+        yield mock
 
 
-# ─── TestClient ──────────────────────────────────────────────────────────────
+# ============================================================
+# Async DB + Redis + LLM fixtures (from orchestrator)
+# ============================================================
+
+@pytest_asyncio.fixture
+async def db_engine():
+    """In-memory SQLite engine with tables created."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def db_session(db_engine) -> AsyncIterator[AsyncSession]:
+    """Single async session per test, rolled back after."""
+    factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def db_factory(db_engine):
+    """Session factory for tests that need factory access."""
+    return async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+
+
+@pytest_asyncio.fixture
+async def fake_redis() -> FakeAsyncRedis:
+    """Fake Redis for tests using Redis pub/sub."""
+    return FakeAsyncRedis()
 
 
 @pytest.fixture
-def client(mock_settings_env):
-    """FastAPI TestClient for integration-style tests."""
-    from app.main import app
+def llm_client() -> FakeLLMClient:
+    """Pre-populated fake LLM for deterministic tests."""
+    return FakeLLMClient()
 
-    return TestClient(app)
+
+@pytest_asyncio.fixture
+async def async_app_client(
+    db_engine, fake_redis, llm_client
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client with overridden deps for orchestrator tests."""
+    app = create_app()
+
+    async def _override_db():
+        factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+        async with factory() as session:
+            yield session
+
+    async def _override_redis():
+        yield fake_redis
+
+    async def _override_factory():
+        session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+        return session_factory
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_redis] = _override_redis
+    app.dependency_overrides[get_db_factory] = _override_factory
+    app.dependency_overrides[get_llm_client] = lambda: llm_client
+
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://testserver")
