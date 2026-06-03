@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator
 
+import pytest
 import pytest_asyncio
 from fakeredis import FakeAsyncRedis
 from httpx import ASGITransport, AsyncClient
@@ -16,6 +17,8 @@ from backend.db.base import Base
 from backend.db.session import get_db, get_db_factory
 from backend.main import create_app
 from backend.redis_client import get_redis
+from backend.services.llm.dependency import get_llm_client
+from backend.services.llm.fake import FakeLLMClient
 
 
 @pytest_asyncio.fixture
@@ -47,7 +50,13 @@ async def redis_client():
 
 
 @pytest_asyncio.fixture
-async def client(session_factory, redis_client) -> AsyncIterator[AsyncClient]:
+def fake_llm():
+    """Default FakeLLMClient for tests. Override per-test with a custom instance."""
+    return FakeLLMClient()
+
+
+@pytest_asyncio.fixture
+async def client(session_factory, redis_client, fake_llm) -> AsyncIterator[AsyncClient]:
     app = create_app()
 
     async def _override_db():
@@ -63,6 +72,7 @@ async def client(session_factory, redis_client) -> AsyncIterator[AsyncClient]:
     app.dependency_overrides[get_db] = _override_db
     app.dependency_overrides[get_redis] = _override_redis
     app.dependency_overrides[get_db_factory] = _override_factory
+    app.dependency_overrides[get_llm_client] = lambda: fake_llm
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
@@ -114,3 +124,28 @@ async def collect_sse(response) -> list[dict[str, Any]]:
             current_event = "message"
             current_data = ""
     return events
+
+
+def make_client_factory(session_factory, redis_client, llm_client):
+    """Create an AsyncClient with custom LLM client for orchestrator tests."""
+    from httpx import ASGITransport, AsyncClient
+
+    app = create_app()
+
+    async def _override_db():
+        async with session_factory() as session:
+            yield session
+
+    async def _override_redis():
+        yield redis_client
+
+    def _override_factory():
+        return session_factory
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_redis] = _override_redis
+    app.dependency_overrides[get_db_factory] = _override_factory
+    app.dependency_overrides[get_llm_client] = lambda: llm_client
+
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://testserver")

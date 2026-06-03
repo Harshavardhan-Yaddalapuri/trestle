@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     URL_VERIFY_CONCURRENCY: int = Field(default=5)
     URL_VERIFY_GONE_THRESHOLD: int = Field(default=3)
     URL_VERIFY_REDIS_LOCK_TTL_SECONDS: int = Field(default=1800)
+
+    DEEPSEEK_API_KEY: SecretStr = Field(default=SecretStr(""))
+    DEEPSEEK_BASE_URL: str = Field(default="https://api.deepseek.com")
+    DEEPSEEK_MODEL: str = Field(default="deepseek-chat")
+    LLM_TIMEOUT_SECONDS: float = Field(default=30.0)
+    LLM_MAX_RETRIES: int = Field(default=2)
+    DEEPSEEK_INPUT_PRICE_PER_MTOK: float = Field(default=0.27)
+    DEEPSEEK_OUTPUT_PRICE_PER_MTOK: float = Field(default=1.10)
+
+    CHAT_USE_ORCHESTRATOR: bool = Field(default=True)
+    ORCHESTRATOR_TIMEOUT_SECONDS: float = Field(default=60.0)
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
