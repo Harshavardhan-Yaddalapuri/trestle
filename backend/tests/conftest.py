@@ -1,6 +1,6 @@
 """Shared test fixtures for Trestle backend tests.
 
-Merged: Supabase mock fixtures (main) + async DB/LLM fixtures (orchestrator).
+Merged: async DB/LLM/Redis fixtures (orchestrator base) + Supabase mock fixtures (main).
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import pytest_asyncio
 from fakeredis import FakeAsyncRedis
-from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -34,7 +33,7 @@ from backend.services.llm.fake import FakeLLMClient
 
 
 # ============================================================
-# Supabase mock fixtures (from main)
+# Env overrides (from main)
 # ============================================================
 
 @pytest.fixture(autouse=True)
@@ -49,9 +48,12 @@ def mock_settings_env(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
 
 
-@pytest.fixture
-def mock_supabase():
-    """Return a fully chainable supabase mock."""
+# ============================================================
+# Supabase mock fixtures (from main)
+# ============================================================
+
+def _make_fresh_mock_supabase():
+    """Create a fresh supabase mock with chainable API."""
     mock = MagicMock()
     mock_execute = MagicMock()
     mock_execute.data = []
@@ -85,49 +87,26 @@ def mock_supabase():
 
 
 @pytest.fixture
+def mock_supabase():
+    """Return a fully chainable supabase mock."""
+    return _make_fresh_mock_supabase()
+
+
+@pytest.fixture
 def mock_supabase_client():
     """Mock create_client to return a chainable mock."""
-    mock = MagicMock()
-    mock_execute = MagicMock()
-    mock_execute.data = []
-    mock_execute.count = 0
-
-    def _chain(*args, **kwargs):
-        return mock
-
-    mock.table = MagicMock(side_effect=_chain)
-    mock.select = MagicMock(side_effect=_chain)
-    mock.insert = MagicMock(side_effect=_chain)
-    mock.update = MagicMock(side_effect=_chain)
-    mock.delete = MagicMock(side_effect=_chain)
-    mock.upsert = MagicMock(side_effect=_chain)
-    mock.eq = MagicMock(side_effect=_chain)
-    mock.neq = MagicMock(side_effect=_chain)
-    mock.gt = MagicMock(side_effect=_chain)
-    mock.lt = MagicMock(side_effect=_chain)
-    mock.gte = MagicMock(side_effect=_chain)
-    mock.lte = MagicMock(side_effect=_chain)
-    mock.like = MagicMock(side_effect=_chain)
-    mock.ilike = MagicMock(side_effect=_chain)
-    mock.is_ = MagicMock(side_effect=_chain)
-    mock.in_ = MagicMock(side_effect=_chain)
-    mock.order = MagicMock(side_effect=_chain)
-    mock.limit = MagicMock(side_effect=_chain)
-    mock.range = MagicMock(side_effect=_chain)
-    mock.single = MagicMock(side_effect=_chain)
-    mock.execute = mock_execute
-
+    mock = _make_fresh_mock_supabase()
     with patch("app.services.supabase.create_client", return_value=mock):
         yield mock
 
 
 # ============================================================
-# Async DB + Redis + LLM fixtures (from orchestrator)
+# Async DB fixtures (orchestrator base)
 # ============================================================
 
 @pytest_asyncio.fixture
 async def db_engine():
-    """In-memory SQLite engine with tables created."""
+    """In-memory SQLite engine with all tables created."""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -138,48 +117,123 @@ async def db_engine():
 
 
 @pytest_asyncio.fixture
-async def db_session(db_engine) -> AsyncIterator[AsyncSession]:
-    """Single async session per test, rolled back after."""
-    factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
-    async with factory() as session:
-        yield session
+async def session_factory(db_engine) -> async_sessionmaker[AsyncSession]:
+    """Async session factory — rollback between tests."""
+    return async_sessionmaker(db_engine, expire_on_commit=False, class_=AsyncSession)
+
+
+# ============================================================
+# Redis + LLM fixtures (orchestrator base)
+# ============================================================
+
+@pytest_asyncio.fixture
+async def redis_client():
+    """Fake Redis for pub/sub tests."""
+    client = FakeAsyncRedis(decode_responses=True)
+    try:
+        yield client
+    finally:
+        try:
+            await client.aclose()
+        except AttributeError:
+            await client.close()
 
 
 @pytest_asyncio.fixture
-async def db_factory(db_engine):
-    """Session factory for tests that need factory access."""
-    return async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
-
-
-@pytest_asyncio.fixture
-async def fake_redis() -> FakeAsyncRedis:
-    """Fake Redis for tests using Redis pub/sub."""
-    return FakeAsyncRedis()
-
-
-@pytest.fixture
-def llm_client() -> FakeLLMClient:
-    """Pre-populated fake LLM for deterministic tests."""
+def fake_llm():
+    """Default FakeLLMClient. Override per-test with custom instance."""
     return FakeLLMClient()
 
 
+# ============================================================
+# HTTP client fixture (orchestrator base)
+# ============================================================
+
 @pytest_asyncio.fixture
-async def async_app_client(
-    db_engine, fake_redis, llm_client
-) -> AsyncIterator[AsyncClient]:
-    """Async HTTP client with overridden deps for orchestrator tests."""
+async def client(session_factory, redis_client, fake_llm) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client with all deps overridden for orchestrator tests."""
     app = create_app()
 
     async def _override_db():
-        factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
-        async with factory() as session:
+        async with session_factory() as session:
             yield session
 
     async def _override_redis():
-        yield fake_redis
+        yield redis_client
 
-    async def _override_factory():
-        session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    def _override_factory():
+        return session_factory
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_redis] = _override_redis
+    app.dependency_overrides[get_db_factory] = _override_factory
+    app.dependency_overrides[get_llm_client] = lambda: fake_llm
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        yield ac
+
+
+# ============================================================
+# Grant seed fixture
+# ============================================================
+
+@pytest_asyncio.fixture
+async def seeded_grants(session_factory) -> dict:
+    """Load seed grants into DB. Returns {inserted, updated, grants}."""
+    from backend.seed.loader import load_grants_from_dir, upsert_grants
+
+    seed_dir = Path(__file__).parent.parent / "seed" / "grants"
+    grants = load_grants_from_dir(seed_dir)
+    async with session_factory() as session:
+        inserted, updated = await upsert_grants(session, grants)
+    return {"inserted": inserted, "updated": updated, "grants": grants}
+
+
+# ============================================================
+# Helper functions
+# ============================================================
+
+async def collect_sse(response) -> list[dict[str, Any]]:
+    """Drain an SSE response into [{id, event, data}] frames."""
+    events: list[dict[str, Any]] = []
+    current_id: str | None = None
+    current_event = "message"
+    current_data = ""
+    async for line in response.aiter_lines():
+        if line.startswith("id: "):
+            current_id = line[4:]
+        elif line.startswith("event: "):
+            current_event = line[7:]
+        elif line.startswith("data: "):
+            current_data += line[6:]
+        elif line == "":
+            if current_data:
+                try:
+                    parsed = json.loads(current_data)
+                except json.JSONDecodeError:
+                    parsed = current_data
+                events.append(
+                    {"id": current_id, "event": current_event, "data": parsed}
+                )
+            current_id = None
+            current_event = "message"
+            current_data = ""
+    return events
+
+
+def make_client_factory(session_factory, redis_client, llm_client):
+    """Create an AsyncClient with custom LLM client for orchestrator tests."""
+    app = create_app()
+
+    async def _override_db():
+        async with session_factory() as session:
+            yield session
+
+    async def _override_redis():
+        yield redis_client
+
+    def _override_factory():
         return session_factory
 
     app.dependency_overrides[get_db] = _override_db
