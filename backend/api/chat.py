@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.core.config import Settings, get_settings
 from backend.core.errors import GoneError, NotFoundError
 from backend.core.logging import get_logger
 from backend.db.models.chat import Conversation, Message
@@ -26,6 +27,8 @@ from backend.services.chat_stream import (
     set_terminal_ttl,
     stream_key,
 )
+from backend.services.llm.base import LLMClient
+from backend.services.llm.dependency import get_llm_client
 from backend.services.llm_stub import stub_token_stream
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -65,6 +68,9 @@ async def _run_producer(
     job_id: str,
     conversation_id: uuid.UUID,
     user_content: str,
+    session_id: str,
+    llm_client: LLMClient,
+    settings: Settings,
 ) -> None:
     """Background producer: emits tokens → persists assistant message →
     emits message_saved → emits done → drops TTL to TERMINAL_TTL.
@@ -79,12 +85,75 @@ async def _run_producer(
     error_emitted = False
 
     try:
-        async for delta in stub_token_stream(user_content):
-            await append_event(redis, s_key, "token", {"delta": delta})
-            full_text += delta
+        if settings.CHAT_USE_ORCHESTRATOR:
+            from backend.services.orchestrator import run_turn
+            from backend.services.orchestrator.events import (
+                FinishEvent,
+                LLMTokenEvent,
+                QuestionEvent,
+                ToolCallEvent,
+                ToolResultEvent,
+            )
+
+            async for event in run_turn(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                user_message=user_content,
+                llm_client=llm_client,
+                session_factory=session_factory,
+                settings=settings,
+            ):
+                if isinstance(event, LLMTokenEvent):
+                    await append_event(redis, s_key, "token", {"delta": event.delta})
+                    full_text += event.delta
+                elif isinstance(event, ToolCallEvent):
+                    await append_event(
+                        redis, s_key, "tool_call", {"name": event.name, "args": event.args}
+                    )
+                elif isinstance(event, ToolResultEvent):
+                    await append_event(
+                        redis, s_key, "tool_result", {"name": event.name, "result": event.result}
+                    )
+                elif isinstance(event, QuestionEvent):
+                    prefix = "\n\n"
+                    await append_event(redis, s_key, "token", {"delta": prefix})
+                    full_text += prefix
+                    await append_event(redis, s_key, "token", {"delta": event.question_text})
+                    full_text += event.question_text
+                    await append_event(
+                        redis,
+                        s_key,
+                        "question_suggested",
+                        {
+                            "field": event.profile_field,
+                            "question": event.question_text,
+                            "options": event.options,
+                        },
+                    )
+                elif isinstance(event, FinishEvent):
+                    finish_reason = event.reason
+        else:
+            # Stub fallback — used when CHAT_USE_ORCHESTRATOR=False
+            async for delta in stub_token_stream(user_content):
+                await append_event(redis, s_key, "token", {"delta": delta})
+                full_text += delta
+
     except asyncio.CancelledError:
         # Client disconnected — keep whatever we have and persist it.
         finish_reason = "stop"
+    except asyncio.TimeoutError:
+        finish_reason = "error"
+        try:
+            await append_event(
+                redis,
+                s_key,
+                "error",
+                {"code": "orchestrator_timeout", "message": "Turn took too long"},
+            )
+            error_emitted = True
+        except Exception:  # noqa: BLE001
+            pass
+        logger.warning("orchestrator_timeout", job_id=job_id)
     except Exception as exc:  # noqa: BLE001
         finish_reason = "error"
         try:
@@ -166,8 +235,10 @@ async def post_message(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_factory),
+    llm_client: LLMClient = Depends(get_llm_client),
 ) -> StreamingResponse:
     session_id = request.state.session_id
+    settings = get_settings()
 
     convo = await _resolve_conversation(db, session_id, body.conversation_id)
 
@@ -208,7 +279,16 @@ async def post_message(
     )
 
     producer = asyncio.create_task(
-        _run_producer(redis, session_factory, job_id, convo.id, body.content),
+        _run_producer(
+            redis,
+            session_factory,
+            job_id,
+            convo.id,
+            body.content,
+            session_id,
+            llm_client,
+            settings,
+        ),
         name=f"chat-producer:{job_id}",
     )
 

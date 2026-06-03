@@ -1,4 +1,5 @@
-"""Stub LLM token generator. Real LLM is wired in a later step.
+"""Stub LLM token generator. Used in tests via dep-override (CHAT_USE_ORCHESTRATOR=False).
+Production uses orchestrator.run_turn (CHAT_USE_ORCHESTRATOR=True).
 
 Emits whitespace-delimited tokens with a small sleep so the SSE stream is
 observably wall-clock-paced, not buffered.
