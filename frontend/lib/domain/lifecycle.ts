@@ -38,6 +38,19 @@ export function isGrantLifecycleStatus(
   );
 }
 
+/** Pipeline order for status-column sorting (early → late → terminal). */
+export const LIFECYCLE_PIPELINE_ORDER: readonly GrantLifecycleStatus[] = [
+  "interested",
+  "researching",
+  "drafting",
+  "submitted",
+  "under_review",
+  "awarded",
+  "rejected",
+  "withdrawn",
+  "abandoned",
+];
+
 export const GRANT_LIFECYCLE_LABELS: Record<GrantLifecycleStatus, string> = {
   interested: "Interested",
   researching: "Researching",

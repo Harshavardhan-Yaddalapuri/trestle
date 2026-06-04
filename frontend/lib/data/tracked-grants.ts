@@ -20,6 +20,7 @@ function toSummary(d: TrackedGrantDetail): TrackedGrantSummary {
     name: d.name,
     status: d.status,
     amountLabel: d.amountLabel,
+    amountMin: d.amountMin,
     deadlineLabel: d.deadlineLabel,
     deadlineIso: d.deadlineIso,
     updatedAt: d.updatedAt,

@@ -13,7 +13,7 @@ export const MAIN_NAV_ITEMS: MainNavItem[] = [
   { icon: "smart_toy", label: "Agentic Search", href: "/search" },
   { icon: "hub", label: "Connections", href: "/connections" },
   { icon: "bookmarks", label: "Resources", href: "/resources" },
-  { icon: "assignment", label: "My Grants", href: "/grants" },
+  { icon: "assignment", label: "Grants", href: "/grants" },
   { icon: "person", label: "Profile", href: "/profile" },
   { icon: "settings", label: "Settings", href: "/settings" },
 ];

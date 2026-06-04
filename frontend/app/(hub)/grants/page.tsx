@@ -1,26 +1,36 @@
 import Link from "next/link";
 import { listTrackedGrants } from "@/lib/data/tracked-grants";
+import { sortTrackedGrants } from "@/lib/data/grants-sort";
 import { isMockDataSource } from "@/lib/config/data-source";
 import {
   GRANT_LIFECYCLE_STATUSES,
   GRANT_LIFECYCLE_LABELS,
-  isGrantLifecycleStatus,
 } from "@/lib/domain/lifecycle";
-import { LifecycleBadge } from "@/components/lifecycle-badge";
+import {
+  buildGrantsListHref,
+  parseGrantsListQuery,
+} from "@/lib/grants-list-query";
+import GrantsTable from "./_components/GrantsTable";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-  title: "My Grants — Trestle",
+  title: "Grants — Trestle",
 };
 
 type PageProps = {
-  searchParams: Promise<{ status?: string; all?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    all?: string;
+    sort?: string;
+    dir?: string;
+  }>;
 };
 
 export default async function GrantsPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const status = isGrantLifecycleStatus(sp.status) ? sp.status : undefined;
-  const showAll = sp.all === "1" || sp.all === "true";
+  const query = parseGrantsListQuery(sp);
+  const { status } = query;
+  const showAll = query.all ?? false;
 
   let grants: Awaited<ReturnType<typeof listTrackedGrants>> = [];
   let loadError: string | null = null;
@@ -30,6 +40,9 @@ export default async function GrantsPage({ searchParams }: PageProps) {
       status,
       all: showAll && !status,
     });
+    if (query.sort && query.dir) {
+      grants = sortTrackedGrants(grants, query.sort, query.dir);
+    }
   } catch (err) {
     loadError =
       err instanceof Error ? err.message : "Could not load grants from the API.";
@@ -44,7 +57,7 @@ export default async function GrantsPage({ searchParams }: PageProps) {
           className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold"
           style={{ fontSize: "28px", lineHeight: "36px" }}
         >
-          My Grants
+          Grants
         </h1>
         <p className="text-on-surface-variant mt-1 text-sm md:text-base">
           {usingApi
@@ -63,72 +76,30 @@ export default async function GrantsPage({ searchParams }: PageProps) {
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <FilterChip href="/grants?all=1" active={showAll && !status}>
+        <FilterChip
+          href={buildGrantsListHref({ sort: query.sort, dir: query.dir, all: true })}
+          active={showAll && !status}
+        >
           All
         </FilterChip>
-        <FilterChip href="/grants" active={!showAll && !status}>
+        <FilterChip
+          href={buildGrantsListHref({ sort: query.sort, dir: query.dir })}
+          active={!showAll && !status}
+        >
           In progress
         </FilterChip>
         {GRANT_LIFECYCLE_STATUSES.map((s) => (
-          <FilterChip key={s} href={`/grants?status=${s}`} active={status === s}>
+          <FilterChip
+            key={s}
+            href={buildGrantsListHref({ sort: query.sort, dir: query.dir, status: s })}
+            active={status === s}
+          >
             {GRANT_LIFECYCLE_LABELS[s]}
           </FilterChip>
         ))}
       </div>
 
-      <div className="rounded-xl border border-outline-variant overflow-hidden bg-surface-container-lowest">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-surface-container text-on-surface-variant text-xs uppercase tracking-wide">
-            <tr>
-              <th className="px-4 py-3 font-medium">Grant</th>
-              <th className="px-4 py-3 font-medium hidden sm:table-cell">Amount</th>
-              <th className="px-4 py-3 font-medium hidden md:table-cell">Deadline</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grants.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-on-surface-variant">
-                  {usingApi
-                    ? "No tracked grants yet. Save a grant from search or chat to see it here."
-                    : "No grants in this status."}
-                </td>
-              </tr>
-            ) : (
-              grants.map((g) => (
-                <tr
-                  key={g.trackId}
-                  className="border-t border-outline-variant hover:bg-surface-variant/40"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/grants/${encodeURIComponent(g.id)}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {g.name}
-                    </Link>
-                    {g.providerName ? (
-                      <p className="text-xs text-on-surface-variant mt-0.5">
-                        {g.providerName}
-                      </p>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 text-on-surface-variant hidden sm:table-cell">
-                    {g.amountLabel ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-on-surface-variant hidden md:table-cell">
-                    {g.deadlineLabel ?? "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <LifecycleBadge status={g.status} />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <GrantsTable grants={grants} query={query} usingApi={usingApi} />
     </div>
   );
 }

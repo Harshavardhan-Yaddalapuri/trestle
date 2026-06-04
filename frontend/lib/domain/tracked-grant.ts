@@ -12,6 +12,8 @@ export interface TrackedGrantSummary {
   name: string;
   status: GrantLifecycleStatus;
   amountLabel: string | null;
+  /** `amount_min` from API (USD cents) for sorting; optional in mock rows. */
+  amountMin: number | null;
   deadlineLabel: string | null;
   /** ISO date for sorting */
   deadlineIso: string | null;

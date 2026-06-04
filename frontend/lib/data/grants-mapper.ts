@@ -38,6 +38,7 @@ export function mapGrantTrackToSummary(item: ApiGrantTrackOut): TrackedGrantSumm
     name: grant.name,
     status: item.lifecycle_status as GrantLifecycleStatus,
     amountLabel: grant.amount_display ?? null,
+    amountMin: grant.amount_min,
     deadlineLabel: label,
     deadlineIso: iso,
     updatedAt: item.lifecycle_updated_at,
