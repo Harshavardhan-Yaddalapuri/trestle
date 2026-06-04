@@ -62,6 +62,12 @@ class GoneError(AppError):
     title = "Gone"
 
 
+class AuthenticationError(AppError):
+    status_code = 401
+    code = "authentication_required"
+    title = "Authentication Required"
+
+
 class RateLimitError(AppError):
     status_code = 429
     code = "rate_limited"

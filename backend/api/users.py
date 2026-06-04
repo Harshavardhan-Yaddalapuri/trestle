@@ -7,11 +7,21 @@ import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.auth import require_user
 from backend.db.models.profile import Profile
+from backend.db.models.user import User
 from backend.db.session import get_db
+from backend.middleware.auth import UserCtx
+from backend.schemas.alerts import AlertPreferencesIn, AlertPreferencesOut
 from backend.schemas.profile import ProfileIn, ProfileOut
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+_PREF_DEFAULTS = {
+    "deadline_reminders": True,
+    "new_grant_matches": True,
+    "check_ins": True,
+}
 
 
 @router.get("/profile", response_model=ProfileOut)
@@ -90,3 +100,41 @@ async def upsert_profile(
     )
     profile = result.scalar_one()
     return ProfileOut.model_validate(profile)
+
+
+@router.get("/alert-preferences", response_model=AlertPreferencesOut)
+async def get_alert_preferences(
+    current_user: UserCtx = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> AlertPreferencesOut:
+    result = await db.execute(sa.select(User).where(User.id == current_user.id))
+    user = result.scalar_one()
+    prefs = user.alert_preferences or {}
+    return AlertPreferencesOut(
+        deadline_reminders=prefs.get("deadline_reminders", _PREF_DEFAULTS["deadline_reminders"]),
+        new_grant_matches=prefs.get("new_grant_matches", _PREF_DEFAULTS["new_grant_matches"]),
+        check_ins=prefs.get("check_ins", _PREF_DEFAULTS["check_ins"]),
+    )
+
+
+@router.put("/alert-preferences", response_model=AlertPreferencesOut)
+async def update_alert_preferences(
+    body: AlertPreferencesIn,
+    current_user: UserCtx = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> AlertPreferencesOut:
+    result = await db.execute(sa.select(User).where(User.id == current_user.id))
+    user = result.scalar_one()
+
+    update = body.model_dump(exclude_unset=True, exclude_none=True)
+    existing = dict(user.alert_preferences or {})
+    existing.update(update)
+    user.alert_preferences = existing
+    user.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return AlertPreferencesOut(
+        deadline_reminders=existing.get("deadline_reminders", _PREF_DEFAULTS["deadline_reminders"]),
+        new_grant_matches=existing.get("new_grant_matches", _PREF_DEFAULTS["new_grant_matches"]),
+        check_ins=existing.get("check_ins", _PREF_DEFAULTS["check_ins"]),
+    )

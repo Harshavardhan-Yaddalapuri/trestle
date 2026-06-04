@@ -43,6 +43,29 @@ services:
       - ./backend:/app/backend:ro
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://trestle:trestle@db:5432/trestle}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:-http://localhost:3000}
+      AUTH_MAGIC_LINK_PATH: ${AUTH_MAGIC_LINK_PATH:-/auth/verify}
+      AUTH_IP_HASH_PEPPER: ${AUTH_IP_HASH_PEPPER:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-log}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-no-reply@trestle.local}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Trestle}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      ALERTS_ENABLED: ${ALERTS_ENABLED:-true}
+      ARQ_QUEUE_NAME: ${ARQ_QUEUE_NAME:-trestle:alerts}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: arq backend.services.jobs.settings.WorkerSettings
+
   web:
     build:
       context: .

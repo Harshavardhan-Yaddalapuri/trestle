@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.errors import NotFoundError, ValidationError
 from backend.core.logging import get_logger
 from backend.db.models.grant import Grant
-from backend.db.models.grant_association import GrantDismissal, GrantTrack
+from backend.db.models.grant_association import (
+    GrantDismissal,
+    GrantLifecycleEvent,
+    GrantTrack,
+)
 from backend.db.models.profile import Profile
 from backend.db.session import get_db
 from backend.schemas.grant import (
@@ -25,6 +29,10 @@ from backend.schemas.grant_association import (
     GrantDismissalItem,
     GrantDismissalListResponse,
     GrantDismissalOut,
+    GrantLifecycleEventListResponse,
+    GrantLifecycleEventOut,
+    GrantLifecycleListResponse,
+    GrantLifecycleTransitionIn,
     GrantTrackIn,
     GrantTrackListResponse,
     GrantTrackOut,
@@ -33,6 +41,11 @@ from backend.schemas.grant_association import (
 )
 from backend.schemas.match import MatchRequest, MatchResponse
 from backend.schemas.verification import GrantVerificationStatus
+from backend.services.lifecycle import (
+    LIFECYCLE_STATUSES,
+    TERMINAL_STATUSES,
+    validate_transition,
+)
 from backend.services.matching import evaluate_grant, resolve_match_profile
 
 router = APIRouter(prefix="/grants", tags=["grants"])
@@ -60,6 +73,19 @@ def _list_filter_string(col, value: str, is_postgres: bool) -> sa.ColumnElement:
     )
 
 
+def _track_out(track: GrantTrack, grant: Grant) -> GrantTrackOut:
+    return GrantTrackOut(
+        id=track.id,
+        grant=GrantSummary.model_validate(grant),
+        note=track.note,
+        created_at=track.created_at,
+        updated_at=track.updated_at,
+        lifecycle_status=track.lifecycle_status,  # type: ignore[arg-type]
+        lifecycle_updated_at=track.lifecycle_updated_at,
+        lifecycle_metadata=track.lifecycle_metadata or {},
+    )
+
+
 @router.get("", response_model=GrantListResponse)
 async def list_grants(
     limit: int = Query(_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
@@ -70,12 +96,16 @@ async def list_grants(
     location: str | None = Query(default=None),
     status: str = Query(default=_DEFAULT_STATUS),
     q: str | None = Query(default=None),
+    include_duplicates: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> GrantListResponse:
     conn = await db.connection()
     is_postgres = conn.dialect.name == "postgresql"
 
     stmt = sa.select(Grant).where(Grant.status == status)
+
+    if not include_duplicates:
+        stmt = stmt.where(Grant.is_duplicate_of.is_(None))
 
     if type is not None:
         stmt = stmt.where(Grant.type == type)
@@ -193,6 +223,7 @@ async def match_grants(
         sa.select(Grant)
         .where(Grant.status == "active")
         .where(sa.or_(Grant.deadline.is_(None), Grant.deadline >= today))
+        .where(Grant.is_duplicate_of.is_(None))
         .limit(1000)
     )
 
@@ -262,6 +293,7 @@ async def track_grant(
 
     if track is not None:
         # Update active row or undelete soft-deleted row.
+        # Preserve lifecycle state on re-track (funnel survives un-tracking).
         await db.execute(
             sa.update(GrantTrack)
             .where(GrantTrack.id == track.id)
@@ -276,18 +308,13 @@ async def track_grant(
             note=body.note,
             created_at=now,
             updated_at=now,
+            lifecycle_updated_at=now,
         )
         db.add(track)
         await db.commit()
         await db.refresh(track)
 
-    return GrantTrackOut(
-        id=track.id,
-        grant=GrantSummary.model_validate(grant),
-        note=track.note,
-        created_at=track.created_at,
-        updated_at=track.updated_at,
-    )
+    return _track_out(track, grant)
 
 
 @router.delete("/track/{grant_ref}", status_code=204)
@@ -360,16 +387,7 @@ async def list_tracked(
     has_more = len(rows) > limit
     rows = rows[:limit]
 
-    items = [
-        GrantTrackOut(
-            id=track.id,
-            grant=GrantSummary.model_validate(grant),
-            note=track.note,
-            created_at=track.created_at,
-            updated_at=track.updated_at,
-        )
-        for track, grant in rows
-    ]
+    items = [_track_out(track, grant) for track, grant in rows]
 
     next_cursor = (
         encode_assoc_cursor(rows[-1][0].updated_at, rows[-1][0].id) if has_more else None
@@ -504,6 +522,183 @@ async def list_dismissed(
     )
 
     return GrantDismissalListResponse(items=items, next_cursor=next_cursor)
+
+
+# ── Lifecycle endpoints ───────────────────────────────────────────────────────
+
+
+@router.get("/lifecycle", response_model=GrantLifecycleListResponse)
+async def list_lifecycle(
+    request: Request,
+    status: str | None = Query(default=None),
+    limit: int = Query(_ASSOC_DEFAULT_LIMIT, ge=1, le=_ASSOC_MAX_LIMIT),
+    cursor: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> GrantLifecycleListResponse:
+    session_id = request.state.session_id
+
+    if status is not None:
+        status_list = [s.strip() for s in status.split(",") if s.strip()]
+        for s in status_list:
+            if s not in LIFECYCLE_STATUSES:
+                raise ValidationError(
+                    f"Invalid lifecycle status: '{s}'",
+                    code="invalid_status",
+                    status_code=400,
+                )
+    else:
+        # Default: all active (non-terminal) statuses.
+        status_list = [s for s in LIFECYCLE_STATUSES if s not in TERMINAL_STATUSES]
+
+    stmt = (
+        sa.select(GrantTrack, Grant)
+        .join(Grant, GrantTrack.grant_id == Grant.id)
+        .where(
+            GrantTrack.session_id == session_id,
+            GrantTrack.deleted_at.is_(None),
+            GrantTrack.lifecycle_status.in_(status_list),
+        )
+    )
+
+    if cursor is not None:
+        try:
+            cursor_ts, cursor_id = decode_assoc_cursor(cursor)
+        except ValueError as exc:
+            raise ValidationError(
+                "Invalid cursor", code="invalid_cursor", status_code=400
+            ) from exc
+        stmt = stmt.where(
+            sa.or_(
+                GrantTrack.lifecycle_updated_at < cursor_ts,
+                sa.and_(
+                    GrantTrack.lifecycle_updated_at == cursor_ts,
+                    GrantTrack.id < cursor_id,
+                ),
+            )
+        )
+
+    stmt = stmt.order_by(
+        GrantTrack.lifecycle_updated_at.desc(), GrantTrack.id.desc()
+    ).limit(limit + 1)
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    items = [_track_out(track, grant) for track, grant in rows]
+
+    next_cursor = (
+        encode_assoc_cursor(rows[-1][0].lifecycle_updated_at, rows[-1][0].id)
+        if has_more
+        else None
+    )
+
+    return GrantLifecycleListResponse(items=items, next_cursor=next_cursor)
+
+
+@router.post("/{grant_ref}/lifecycle", response_model=GrantTrackOut)
+async def transition_lifecycle(
+    grant_ref: str,
+    body: GrantLifecycleTransitionIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> GrantTrackOut:
+    session_id = request.state.session_id
+    grant = await _resolve_grant(grant_ref, db)
+
+    track_result = await db.execute(
+        sa.select(GrantTrack).where(
+            GrantTrack.session_id == session_id,
+            GrantTrack.grant_id == grant.id,
+            GrantTrack.deleted_at.is_(None),
+        )
+    )
+    track = track_result.scalar_one_or_none()
+    if track is None:
+        raise NotFoundError("Grant not tracked")
+
+    from_status = track.lifecycle_status
+    validate_transition(from_status, body.to_status, "user")
+
+    now = _utcnow()
+
+    # Merge metadata: existing ∪ incoming, with None values removed.
+    existing_meta: dict = track.lifecycle_metadata or {}
+    merged_meta = {**existing_meta, **body.metadata}
+    merged_meta = {k: v for k, v in merged_meta.items() if v is not None}
+
+    await db.execute(
+        sa.update(GrantTrack)
+        .where(GrantTrack.id == track.id)
+        .values(
+            lifecycle_status=body.to_status,
+            lifecycle_updated_at=now,
+            lifecycle_metadata=merged_meta,
+            updated_at=now,
+        )
+    )
+
+    event = GrantLifecycleEvent(
+        grant_track_id=track.id,
+        from_status=from_status,
+        to_status=body.to_status,
+        transition_kind="user",
+        note=body.note,
+        event_metadata=body.metadata,
+        session_id=session_id,
+        created_at=now,
+    )
+    db.add(event)
+
+    await db.commit()
+    await db.refresh(track)
+
+    return _track_out(track, grant)
+
+
+@router.get("/{grant_ref}/lifecycle/events", response_model=GrantLifecycleEventListResponse)
+async def get_lifecycle_events(
+    grant_ref: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> GrantLifecycleEventListResponse:
+    session_id = request.state.session_id
+    grant = await _resolve_grant(grant_ref, db)
+
+    track_result = await db.execute(
+        sa.select(GrantTrack).where(
+            GrantTrack.session_id == session_id,
+            GrantTrack.grant_id == grant.id,
+            GrantTrack.deleted_at.is_(None),
+        )
+    )
+    track = track_result.scalar_one_or_none()
+    if track is None:
+        raise NotFoundError("Grant not tracked")
+
+    events_result = await db.execute(
+        sa.select(GrantLifecycleEvent)
+        .where(GrantLifecycleEvent.grant_track_id == track.id)
+        .order_by(GrantLifecycleEvent.created_at.asc())
+    )
+    events = events_result.scalars().all()
+
+    return GrantLifecycleEventListResponse(
+        events=[
+            GrantLifecycleEventOut(
+                id=e.id,
+                from_status=e.from_status,  # type: ignore[arg-type]
+                to_status=e.to_status,  # type: ignore[arg-type]
+                transition_kind=e.transition_kind,  # type: ignore[arg-type]
+                note=e.note,
+                metadata=e.event_metadata or {},
+                created_at=e.created_at,
+            )
+            for e in events
+        ]
+    )
 
 
 # ── Grant lookup helper ───────────────────────────────────────────────────────
