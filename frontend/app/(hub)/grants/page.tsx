@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listTrackedGrants } from "@/lib/data/tracked-grants";
+import { isMockDataSource } from "@/lib/config/data-source";
 import {
   GRANT_LIFECYCLE_STATUSES,
   GRANT_LIFECYCLE_LABELS,
@@ -13,13 +14,28 @@ export const metadata = {
 };
 
 type PageProps = {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; all?: string }>;
 };
 
 export default async function GrantsPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const status = isGrantLifecycleStatus(sp.status) ? sp.status : undefined;
-  const grants = await listTrackedGrants({ status });
+  const showAll = sp.all === "1" || sp.all === "true";
+
+  let grants: Awaited<ReturnType<typeof listTrackedGrants>> = [];
+  let loadError: string | null = null;
+
+  try {
+    grants = await listTrackedGrants({
+      status,
+      all: showAll && !status,
+    });
+  } catch (err) {
+    loadError =
+      err instanceof Error ? err.message : "Could not load grants from the API.";
+  }
+
+  const usingApi = !isMockDataSource();
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -31,13 +47,27 @@ export default async function GrantsPage({ searchParams }: PageProps) {
           My Grants
         </h1>
         <p className="text-on-surface-variant mt-1 text-sm md:text-base">
-          Filter by lifecycle status. Data loads from the mock adapter until the API is ready.
+          {usingApi
+            ? "Tracked grants from your workspace, filtered by lifecycle status."
+            : "Mock data — set NEXT_PUBLIC_DATA_SOURCE=api to use the backend."}
         </p>
       </div>
 
+      {loadError ? (
+        <div
+          className="rounded-lg border border-error/30 bg-error-container/30 px-4 py-3 text-sm text-on-error-container"
+          role="alert"
+        >
+          {loadError}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
-        <FilterChip href="/grants" active={!status}>
+        <FilterChip href="/grants?all=1" active={showAll && !status}>
           All
+        </FilterChip>
+        <FilterChip href="/grants" active={!showAll && !status}>
+          In progress
         </FilterChip>
         {GRANT_LIFECYCLE_STATUSES.map((s) => (
           <FilterChip key={s} href={`/grants?status=${s}`} active={status === s}>
@@ -60,16 +90,29 @@ export default async function GrantsPage({ searchParams }: PageProps) {
             {grants.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-on-surface-variant">
-                  No grants in this status.
+                  {usingApi
+                    ? "No tracked grants yet. Save a grant from search or chat to see it here."
+                    : "No grants in this status."}
                 </td>
               </tr>
             ) : (
               grants.map((g) => (
-                <tr key={g.id} className="border-t border-outline-variant hover:bg-surface-variant/40">
+                <tr
+                  key={g.trackId}
+                  className="border-t border-outline-variant hover:bg-surface-variant/40"
+                >
                   <td className="px-4 py-3">
-                    <Link href={`/grants/${g.id}`} className="font-medium text-primary hover:underline">
+                    <Link
+                      href={`/grants/${encodeURIComponent(g.id)}`}
+                      className="font-medium text-primary hover:underline"
+                    >
                       {g.name}
                     </Link>
+                    {g.providerName ? (
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        {g.providerName}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-on-surface-variant hidden sm:table-cell">
                     {g.amountLabel ?? "—"}

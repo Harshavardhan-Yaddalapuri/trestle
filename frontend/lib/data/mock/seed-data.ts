@@ -13,7 +13,9 @@ twoWeeks.setDate(twoWeeks.getDate() + 14);
 
 export const MOCK_TRACKED_GRANTS: TrackedGrantDetail[] = [
   {
-    id: "tracked-001",
+    trackId: "track-001",
+    grantId: "grant-001",
+    id: "res-mi-ai-fund",
     catalogResourceId: "res-mi-ai-fund",
     name: "Michigan AI Innovation Fund",
     status: "under_review",
@@ -80,10 +82,12 @@ export const MOCK_TRACKED_GRANTS: TrackedGrantDetail[] = [
     extensions: { reviewPanelWeek: "2026-06-02" },
   },
   {
-    id: "tracked-002",
+    trackId: "track-002",
+    grantId: "grant-002",
+    id: "nsf-sbir-phase-1",
     catalogResourceId: null,
     name: "SBIR Phase I — NSF",
-    status: "applied",
+    status: "submitted",
     amountLabel: "Up to $275k",
     deadlineLabel: "Jun 30, 2026",
     deadlineIso: "2026-06-30T23:59:59.000Z",
@@ -118,10 +122,12 @@ export const MOCK_TRACKED_GRANTS: TrackedGrantDetail[] = [
     notes: [],
   },
   {
-    id: "tracked-003",
+    trackId: "track-003",
+    grantId: "grant-003",
+    id: "res-local-accelerator",
     catalogResourceId: "res-local-accelerator",
     name: "Detroit Mobility Challenge Grant",
-    status: "saved",
+    status: "interested",
     amountLabel: "$25k",
     deadlineLabel: "Jul 1, 2026",
     deadlineIso: "2026-07-01T23:59:59.000Z",
@@ -155,7 +161,9 @@ export const MOCK_TRACKED_GRANTS: TrackedGrantDetail[] = [
     ],
   },
   {
-    id: "tracked-004",
+    trackId: "track-004",
+    grantId: "grant-004",
+    id: "regional-innovation-seed",
     catalogResourceId: null,
     name: "Regional Innovation Seed Fund",
     status: "awarded",
@@ -193,7 +201,9 @@ export const MOCK_TRACKED_GRANTS: TrackedGrantDetail[] = [
     notes: [],
   },
   {
-    id: "tracked-005",
+    trackId: "track-005",
+    grantId: "grant-005",
+    id: "cleantech-fast-grant",
     catalogResourceId: null,
     name: "CleanTech Fast Grant",
     status: "rejected",
@@ -235,7 +245,9 @@ export const MOCK_TRACKED_GRANTS: TrackedGrantDetail[] = [
 export const MOCK_DASHBOARD_HOME: DashboardHome = {
   schemaVersion: 1,
   activeGrants: MOCK_TRACKED_GRANTS.filter((g) =>
-    ["saved", "applied", "under_review"].includes(g.status),
+    ["interested", "researching", "drafting", "submitted", "under_review"].includes(
+      g.status,
+    ),
   ).map((g) => ({
     trackedGrantId: g.id,
     name: g.name,
