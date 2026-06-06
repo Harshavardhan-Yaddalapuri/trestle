@@ -1,4 +1,4 @@
-const COOKIE_NAME = "trestle_anon_session";
+const COOKIE_NAME = "trestle_session_id";
 const COOKIE_MAX_AGE_DAYS = 30;
 
 function generateUUID(): string {

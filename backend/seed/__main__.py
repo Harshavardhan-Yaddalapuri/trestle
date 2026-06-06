@@ -21,7 +21,7 @@ async def _run() -> None:
     logger = get_logger(__name__)
 
     settings = get_settings()
-    engine = create_async_engine(settings.DATABASE_URL, future=True)
+    engine = create_async_engine(settings.DATABASE_URL, future=True, connect_args={"statement_cache_size": 0})
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     try:

@@ -21,6 +21,7 @@ def init_engine() -> AsyncEngine:
             settings.DATABASE_URL,
             pool_pre_ping=True,
             future=True,
+            connect_args={"statement_cache_size": 0},
         )
         _session_factory = async_sessionmaker(
             _engine, expire_on_commit=False, class_=AsyncSession

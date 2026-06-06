@@ -12,13 +12,13 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            request.cookies.set(name, value)
+        setAll(cookiesToSet: { name: string; value: string; options?: object }[]) {
+          cookiesToSet.forEach((cookie: { name: string; value: string; options?: object }) =>
+            request.cookies.set(cookie.name, cookie.value)
           );
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+          cookiesToSet.forEach((cookie: { name: string; value: string; options?: object }) =>
+            supabaseResponse.cookies.set(cookie.name, cookie.value, cookie.options)
           );
         },
       },
@@ -26,7 +26,27 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresh session if expired — important!
-  await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // Protected route enforcement: redirect unauthenticated users to /login
+  const protectedPrefixes = ["/dashboard", "/search", "/profile", "/grants", "/settings", "/connections", "/resources"];
+  const isProtected = protectedPrefixes.some((p) =>
+    request.nextUrl.pathname.startsWith(p)
+  );
+  if (isProtected && !session) {
+    const loginUrl = new URL("/login", request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Redirect already-authenticated users away from login/signup
+  const authPages = ["/login", "/signup"];
+  const isAuthPage = authPages.includes(request.nextUrl.pathname);
+  if (isAuthPage && session) {
+    const dashboardUrl = new URL("/dashboard", request.url);
+    return NextResponse.redirect(dashboardUrl);
+  }
 
   return supabaseResponse;
 }

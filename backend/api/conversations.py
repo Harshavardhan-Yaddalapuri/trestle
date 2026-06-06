@@ -11,6 +11,7 @@ from backend.core.errors import NotFoundError, ValidationError
 from backend.core.logging import get_logger
 from backend.db.models.chat import Conversation, Message
 from backend.db.session import get_db
+from backend.middleware.auth import get_identity, owner_clause
 from backend.schemas.conversation import (
     ConversationDetail,
     ConversationListResponse,
@@ -34,7 +35,8 @@ async def list_conversations(
     cursor: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationListResponse:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
+    clause = owner_clause(Conversation.user_id, Conversation.session_id, request)
 
     # Correlated subqueries: counted-message and latest-message-preview attach
     # directly to each conversation row, so the whole listing is one round-trip
@@ -62,7 +64,7 @@ async def list_conversations(
         message_count_subq.label("message_count"),
         last_preview_subq.label("last_message_preview"),
     ).where(
-        Conversation.session_id == session_id,
+        clause,
         Conversation.deleted_at.is_(None),
     )
 
@@ -123,12 +125,23 @@ async def get_conversation(
     conversation_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> ConversationDetail:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
+    clause = owner_clause(Conversation.user_id, Conversation.session_id, request)
 
     convo = await db.get(Conversation, conversation_id)
     # 404 covers all three "no" cases: missing, soft-deleted, wrong session.
     # Returning the same error means callers can't enumerate ids by behavior.
-    if convo is None or convo.deleted_at is not None or convo.session_id != session_id:
+    if convo is None or convo.deleted_at is not None:
+        raise NotFoundError("Conversation not found")
+    # Re-check ownership via clause (user_id or session_id match)
+    result = await db.execute(
+        sa.select(Conversation).where(
+            Conversation.id == conversation_id,
+            clause,
+            Conversation.deleted_at.is_(None),
+        )
+    )
+    if result.scalar_one_or_none() is None:
         raise NotFoundError("Conversation not found")
 
     msg_result = await db.execute(
@@ -161,7 +174,8 @@ async def delete_conversation(
     conversation_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
+    clause = owner_clause(Conversation.user_id, Conversation.session_id, request)
 
     # One atomic UPDATE — combines existence, ownership, and not-yet-deleted
     # checks. rowcount == 0 means at least one of those failed; we return 404
@@ -171,7 +185,7 @@ async def delete_conversation(
         sa.update(Conversation)
         .where(
             Conversation.id == conversation_id,
-            Conversation.session_id == session_id,
+            clause,
             Conversation.deleted_at.is_(None),
         )
         .values(deleted_at=func.now())

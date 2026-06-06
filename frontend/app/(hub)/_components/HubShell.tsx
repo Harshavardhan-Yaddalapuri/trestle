@@ -35,7 +35,7 @@ export default function HubShell({ children }: { children: React.ReactNode }) {
           </span>
         </header>
 
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-8">{children}</main>
+        <main className={`flex-1 ${pathname.startsWith("/search") ? "overflow-hidden flex flex-col pb-0 md:pb-0" : "overflow-y-auto pb-20 md:pb-8"}`}>{children}</main>
         <MobileTrayNav />
       </div>
     </div>

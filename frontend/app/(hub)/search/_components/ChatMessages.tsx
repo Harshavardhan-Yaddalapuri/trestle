@@ -15,16 +15,23 @@ interface LeadCard {
   avatar: string;
 }
 
-interface AgentMessage {
+interface QuestionNudge {
+  field: string;
+  question: string;
+  options?: Array<{ label: string; value: string } | string>;
+}
+
+export interface AgentMessage {
   text: string;
   thinking?: { label: string; detail: string };
   leads?: LeadCard[];
   grants?: GrantData[];
   prompts?: string[];
   attachment?: { name: string; size: string; count: string };
+  question?: QuestionNudge;
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   type: "system" | "user" | "agent";
   content?: string;
   time?: string;
@@ -103,6 +110,46 @@ function LeadCardItem({ lead }: { lead: LeadCard }) {
   );
 }
 
+function QuestionNudgeCard({ question, onSelect }: { question: QuestionNudge; onSelect?: (p: string) => void }) {
+  return (
+    <div className="mt-4 p-4 bg-primary-container/40 border border-primary/20 rounded-2xl">
+      <div className="flex items-start gap-3 mb-3">
+        <div className="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>help</span>
+        </div>
+        <p className="text-on-surface font-medium" style={{ fontSize: "14px", lineHeight: "20px" }}>
+          {question.question}
+        </p>
+      </div>
+      {question.options && question.options.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {question.options.map((opt, i) => {
+            let label: string;
+            let value: string;
+            if (typeof opt === "string") {
+              label = opt;
+              value = opt;
+            } else {
+              label = opt.label;
+              value = opt.value;
+            }
+            return (
+              <button
+                key={i}
+                onClick={() => onSelect?.(value)}
+                className="bg-surface-container-highest text-on-surface px-4 py-2 rounded-full hover:bg-primary-container transition-colors border border-outline-variant"
+                style={{ fontSize: "13px", fontWeight: 500 }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentBubble({ agent, onPromptSelect }: { agent: AgentMessage; onPromptSelect?: (p: string) => void }) {
   return (
     <div className="flex flex-col items-start gap-1">
@@ -114,10 +161,14 @@ function AgentBubble({ agent, onPromptSelect }: { agent: AgentMessage; onPromptS
       </div>
 
       <div className="bg-surface-container-low border border-outline-variant text-on-surface px-5 py-4 rounded-3xl rounded-tl-none max-w-full md:max-w-[85%]">
-        <p className="mb-4" style={{ fontSize: "16px", lineHeight: "24px", letterSpacing: "0.5px" }}>
-          {agent.text}
-        </p>
+        {/* Text content */}
+        {agent.text && (
+          <div className="whitespace-pre-wrap mb-2" style={{ fontSize: "16px", lineHeight: "24px", letterSpacing: "0.5px" }}>
+            {agent.text}
+          </div>
+        )}
 
+        {/* Thinking indicator */}
         {agent.thinking && (
           <div className="bg-surface-container-highest rounded-xl p-4 flex items-center gap-4">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -134,7 +185,7 @@ function AgentBubble({ agent, onPromptSelect }: { agent: AgentMessage; onPromptS
 
         {/* Grant cards */}
         {agent.grants && agent.grants.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             {agent.grants.map((grant) => (
               <GrantCard key={grant.name} grant={grant} />
             ))}
@@ -143,7 +194,7 @@ function AgentBubble({ agent, onPromptSelect }: { agent: AgentMessage; onPromptS
 
         {/* Lead cards */}
         {agent.leads && agent.leads.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             {agent.leads.map((lead) => (
               <LeadCardItem key={lead.name} lead={lead} />
             ))}
@@ -168,6 +219,11 @@ function AgentBubble({ agent, onPromptSelect }: { agent: AgentMessage; onPromptS
               <span className="material-symbols-outlined">download</span>
             </button>
           </div>
+        )}
+
+        {/* Question nudge */}
+        {agent.question && (
+          <QuestionNudgeCard question={agent.question} onSelect={onPromptSelect} />
         )}
 
         {/* Adaptive prompt chips */}
@@ -210,4 +266,4 @@ export default function ChatMessages({ messages, onPromptSelect }: ChatMessagesP
   );
 }
 
-export type { ChatMessage, LeadCard, AgentMessage, GrantData };
+export type { LeadCard, GrantData };

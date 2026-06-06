@@ -62,7 +62,7 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             }}
             className="flex-1 bg-transparent border-none focus:ring-0 py-3 text-on-surface resize-none min-h-[48px] max-h-[200px]"
             style={{ fontSize: "16px", lineHeight: "24px", scrollbarWidth: "none" }}
-            placeholder="Message LeadGen Agent..."
+            placeholder="Describe your startup or ask for grants, accelerators, competitions..."
             rows={1}
             disabled={disabled}
             aria-label="Chat message input"

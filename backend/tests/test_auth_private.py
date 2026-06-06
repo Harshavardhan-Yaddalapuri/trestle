@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
+import pytest
 from fastapi import status
 
 
@@ -30,7 +31,8 @@ from fastapi import status
 class TestMe:
     """GET /api/auth/me — protected endpoint."""
 
-    def test_me_with_valid_token(
+    @pytest.mark.asyncio
+    async def test_me_with_valid_token(
         self, client, mock_successful_jwt_verification, mock_supabase_client
     ):
         """GET /me with valid token returns 200 + profile."""
@@ -56,7 +58,7 @@ class TestMe:
             }
         ]
 
-        response = client.get(
+        response = await client.get(
             "/api/auth/me",
             headers={"Authorization": "Bearer valid-token"},
         )
@@ -67,26 +69,27 @@ class TestMe:
         assert body["user_id"] == "12345678-1234-1234-1234-123456789abc"
         assert body["company_name"] == "Acme Corp"
 
-    def test_me_without_token_returns_401(self, client):
+    @pytest.mark.asyncio
+    async def test_me_without_token_returns_401(self, client):
         """GET /me without Authorization header returns 401."""
-        response = client.get("/api/auth/me")
+        response = await client.get("/api/auth/me")
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert response.json()["detail"] == "Not authenticated"
         assert "www-authenticate" in response.headers
 
-    def test_me_with_expired_token_returns_401(
+    @pytest.mark.asyncio
+    async def test_me_with_expired_token_returns_401(
         self, client, mock_supabase_client
     ):
         """GET /me with an expired JWT returns 401."""
-        # Mock verify_supabase_jwt to raise ValueError (simulating expired)
-        import app.middleware.auth as auth_mod
+        import backend.middleware.auth as auth_mod
 
-        async def mock_verify_expired(token):
+        def mock_verify_expired(token):
             raise ValueError("Token verification failed: Signature has expired")
 
-        with patch.object(auth_mod, "verify_supabase_jwt", new=mock_verify_expired):
-            response = client.get(
+        with patch.object(auth_mod, "_verify_token", new=mock_verify_expired):
+            response = await client.get(
                 "/api/auth/me",
                 headers={"Authorization": "Bearer expired-token"},
             )
@@ -95,24 +98,26 @@ class TestMe:
         detail = response.json()["detail"]
         assert "Invalid token" in detail or "expired" in detail.lower()
 
-    def test_me_with_malformed_token_returns_401(self, client):
+    @pytest.mark.asyncio
+    async def test_me_with_malformed_token_returns_401(self, client):
         """GET /me with a malformed JWT returns 401."""
-        import app.middleware.auth as auth_mod
+        import backend.middleware.auth as auth_mod
 
-        async def mock_verify_malformed(token):
+        def mock_verify_malformed(token):
             raise ValueError("Invalid token header")
 
-        with patch.object(auth_mod, "verify_supabase_jwt", new=mock_verify_malformed):
-            response = client.get(
+        with patch.object(auth_mod, "_verify_token", new=mock_verify_malformed):
+            response = await client.get(
                 "/api/auth/me",
                 headers={"Authorization": "Bearer garbage"},
             )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_me_with_missing_bearer_prefix_returns_401(self, client):
+    @pytest.mark.asyncio
+    async def test_me_with_missing_bearer_prefix_returns_401(self, client):
         """GET /me with token but no 'Bearer ' prefix returns 401."""
-        response = client.get(
+        response = await client.get(
             "/api/auth/me",
             headers={"Authorization": "valid-token-without-bearer"},
         )
@@ -121,14 +126,15 @@ class TestMe:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert response.json()["detail"] == "Not authenticated"
 
-    def test_me_user_not_found_in_db(
+    @pytest.mark.asyncio
+    async def test_me_user_not_found_in_db(
         self, client, mock_successful_jwt_verification, mock_supabase_client
     ):
         """GET /me with valid token but user not in internal DB returns 404."""
         # _get_user_with_profile returns None
         mock_supabase_client.table().select().eq().is_().limit().execute().data = []
 
-        response = client.get(
+        response = await client.get(
             "/api/auth/me",
             headers={"Authorization": "Bearer valid-token"},
         )
@@ -145,9 +151,10 @@ class TestMe:
 class TestLogout:
     """POST /api/auth/logout — protected endpoint."""
 
-    def test_logout_with_valid_token(self, client, mock_successful_jwt_verification):
+    @pytest.mark.asyncio
+    async def test_logout_with_valid_token(self, client, mock_successful_jwt_verification):
         """Logout with valid token returns 200."""
-        response = client.post(
+        response = await client.post(
             "/api/auth/logout",
             headers={"Authorization": "Bearer valid-token"},
         )
@@ -155,9 +162,10 @@ class TestLogout:
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["message"] == "Logged out successfully."
 
-    def test_logout_without_token_returns_401(self, client):
+    @pytest.mark.asyncio
+    async def test_logout_without_token_returns_401(self, client):
         """Logout without token returns 401."""
-        response = client.post("/api/auth/logout")
+        response = await client.post("/api/auth/logout")
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert response.json()["detail"] == "Not authenticated"
@@ -173,24 +181,26 @@ class TestMergeSession:
 
     ANON_SESSION_ID = "12345678-1234-1234-1234-123456789abc"
 
-    def test_merge_session_without_auth_returns_401(self, client):
+    @pytest.mark.asyncio
+    async def test_merge_session_without_auth_returns_401(self, client):
         """Merge-session without token returns 401."""
-        response = client.post(
+        response = await client.post(
             "/api/auth/merge-session",
             json={"anon_session_id": self.ANON_SESSION_ID},
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_merge_session_with_invalid_token_returns_401(self, client):
+    @pytest.mark.asyncio
+    async def test_merge_session_with_invalid_token_returns_401(self, client):
         """Merge-session with invalid token returns 401."""
-        import app.middleware.auth as auth_mod
+        import backend.middleware.auth as auth_mod
 
-        async def mock_verify_fail(token):
+        def mock_verify_fail(token):
             raise ValueError("Invalid token")
 
-        with patch.object(auth_mod, "verify_supabase_jwt", new=mock_verify_fail):
-            response = client.post(
+        with patch.object(auth_mod, "_verify_token", new=mock_verify_fail):
+            response = await client.post(
                 "/api/auth/merge-session",
                 json={"anon_session_id": self.ANON_SESSION_ID},
                 headers={"Authorization": "Bearer invalid-token"},
@@ -198,14 +208,15 @@ class TestMergeSession:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_merge_session_session_not_found(
+    @pytest.mark.asyncio
+    async def test_merge_session_session_not_found(
         self, client, mock_successful_jwt_verification, mock_supabase_client
     ):
         """Merge-session with valid auth but nonexistent session returns 400."""
         # Session lookup returns empty
         mock_supabase_client.table().select().eq().is_().limit().execute().data = []
 
-        response = client.post(
+        response = await client.post(
             "/api/auth/merge-session",
             json={"anon_session_id": self.ANON_SESSION_ID},
             headers={"Authorization": "Bearer valid-token"},
@@ -214,7 +225,8 @@ class TestMergeSession:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "not found" in response.json()["detail"].lower()
 
-    def test_merge_session_already_merged(
+    @pytest.mark.asyncio
+    async def test_merge_session_already_merged(
         self, client, mock_successful_jwt_verification, mock_supabase_client
     ):
         """Merge-session on already-merged session returns 200 with merged=True."""
@@ -228,7 +240,7 @@ class TestMergeSession:
             }
         ]
 
-        response = client.post(
+        response = await client.post(
             "/api/auth/merge-session",
             json={"anon_session_id": self.ANON_SESSION_ID},
             headers={"Authorization": "Bearer valid-token"},
@@ -240,7 +252,8 @@ class TestMergeSession:
         assert body["conversations_migrated"] == 0
         assert "already merged" in body["message"].lower()
 
-    def test_merge_session_expired(
+    @pytest.mark.asyncio
+    async def test_merge_session_expired(
         self, client, mock_successful_jwt_verification, mock_supabase_client
     ):
         """Merge-session with expired session returns 400."""
@@ -254,7 +267,7 @@ class TestMergeSession:
             }
         ]
 
-        response = client.post(
+        response = await client.post(
             "/api/auth/merge-session",
             json={"anon_session_id": self.ANON_SESSION_ID},
             headers={"Authorization": "Bearer valid-token"},
@@ -263,7 +276,8 @@ class TestMergeSession:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "expired" in response.json()["detail"].lower()
 
-    def test_merge_session_success(
+    @pytest.mark.asyncio
+    async def test_merge_session_success(
         self, client, mock_successful_jwt_verification, mock_supabase_client
     ):
         """Successful merge returns 200 and migrates conversations."""
@@ -293,7 +307,7 @@ class TestMergeSession:
             elif call_count[0] == 2:
                 # Conversations update
                 result.data = [
-                    {"id": "conv-1", "user_id": str(mock_successful_jwt_verification._mock_return_value[0])},
+                    {"id": "conv-1", "user_id": str(mock_successful_jwt_verification[0])},
                 ]
             elif call_count[0] == 3:
                 # Profiles lookup
@@ -310,7 +324,7 @@ class TestMergeSession:
 
         mock_supabase_client.execute = MagicMock(side_effect=execute_side_effect)
 
-        response = client.post(
+        response = await client.post(
             "/api/auth/merge-session",
             json={"anon_session_id": self.ANON_SESSION_ID},
             headers={"Authorization": "Bearer valid-token"},
@@ -331,7 +345,8 @@ class TestMergeSession:
 class TestMagicLinkVerify:
     """GET /api/auth/magic-link/verify — public but tests edge cases."""
 
-    def test_invalid_token_hash_returns_400(self, client):
+    @pytest.mark.asyncio
+    async def test_invalid_token_hash_returns_400(self, client):
         """Invalid/expired magic link token hash returns 400."""
         async def mock_get_fail(*args, **kwargs):
             mock = MagicMock()
@@ -340,7 +355,7 @@ class TestMagicLinkVerify:
             return mock
 
         with patch("httpx.AsyncClient.get", new=mock_get_fail):
-            response = client.get(
+            response = await client.get(
                 "/api/auth/magic-link/verify",
                 params={"token_hash": "bad-hash", "type": "magiclink"},
             )

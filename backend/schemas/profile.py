@@ -93,6 +93,7 @@ class ProfileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     session_id: str
+    user_id: Optional[str] = None
     founder_name: Optional[str] = None
     company_name: Optional[str] = None
     company_stage: Optional[str] = None

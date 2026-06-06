@@ -11,6 +11,8 @@ from backend.db.models.profile import Profile
 from backend.db.session import get_db
 from backend.schemas.profile import ProfileIn, ProfileOut
 
+from backend.middleware.auth import get_identity, owner_clause
+
 router = APIRouter(prefix="/users", tags=["users"])
 
 
@@ -19,15 +21,16 @@ async def get_profile(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> ProfileOut:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
+    clause = owner_clause(Profile.user_id, Profile.session_id, request)
 
     result = await db.execute(
-        sa.select(Profile).where(Profile.session_id == session_id)
+        sa.select(Profile).where(clause)
     )
     profile = result.scalar_one_or_none()
 
     if profile is None:
-        return ProfileOut(session_id=session_id)
+        return ProfileOut(session_id=session_id, user_id=user_id)
 
     return ProfileOut.model_validate(profile)
 
@@ -38,8 +41,10 @@ async def upsert_profile(
     body: ProfileIn,
     db: AsyncSession = Depends(get_db),
 ) -> ProfileOut:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     fields = body.model_dump(exclude_unset=True)
+    if user_id:
+        fields["user_id"] = user_id
 
     conn = await db.connection()
     is_postgres = conn.dialect.name == "postgresql"
@@ -51,6 +56,7 @@ async def upsert_profile(
         stmt = pg_insert(Profile).values(
             id=uuid.uuid4(),
             session_id=session_id,
+            user_id=user_id,
             created_at=now,
             updated_at=now,
             **fields,
@@ -62,8 +68,9 @@ async def upsert_profile(
         await db.execute(stmt)
         await db.commit()
     else:
+        clause = owner_clause(Profile.user_id, Profile.session_id, request)
         result = await db.execute(
-            sa.select(Profile).where(Profile.session_id == session_id)
+            sa.select(Profile).where(clause)
         )
         profile = result.scalar_one_or_none()
 
@@ -71,6 +78,7 @@ async def upsert_profile(
         if profile is None:
             profile = Profile(
                 session_id=session_id,
+                user_id=user_id,
                 created_at=now,
                 updated_at=now,
                 **fields,
@@ -85,8 +93,9 @@ async def upsert_profile(
         await db.refresh(profile)
         return ProfileOut.model_validate(profile)
 
+    clause = owner_clause(Profile.user_id, Profile.session_id, request)
     result = await db.execute(
-        sa.select(Profile).where(Profile.session_id == session_id)
+        sa.select(Profile).where(clause)
     )
     profile = result.scalar_one()
     return ProfileOut.model_validate(profile)

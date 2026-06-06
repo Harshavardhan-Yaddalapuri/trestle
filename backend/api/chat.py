@@ -15,6 +15,7 @@ from backend.core.errors import GoneError, NotFoundError
 from backend.core.logging import get_logger
 from backend.db.models.chat import Conversation, Message
 from backend.db.session import get_db, get_db_factory
+from backend.middleware.auth import get_identity, owner_clause
 from backend.redis_client import get_redis
 from backend.schemas.chat import ChatMessageIn
 from backend.services.chat_stream import (
@@ -46,19 +47,26 @@ def _utcnow_iso() -> str:
 
 
 async def _resolve_conversation(
-    db: AsyncSession, session_id: str, conversation_id: uuid.UUID | None
+    db: AsyncSession, user_id: str | None, session_id: str, conversation_id: uuid.UUID | None
 ) -> Conversation:
-    """Load an existing conversation for this session, or create a new one."""
+    """Load an existing conversation for this user/session, or create a new one."""
     if conversation_id is None:
-        convo = Conversation(session_id=session_id)
+        convo = Conversation(user_id=user_id, session_id=session_id)
         db.add(convo)
         await db.flush()
         return convo
 
     convo = await db.get(Conversation, conversation_id)
     # Return a 404 (not 403) for any access failure to avoid leaking existence.
-    if convo is None or convo.deleted_at is not None or convo.session_id != session_id:
+    if convo is None or convo.deleted_at is not None:
         raise NotFoundError("Conversation not found")
+    # Re-check ownership
+    if user_id:
+        if convo.user_id != user_id and convo.session_id != session_id:
+            raise NotFoundError("Conversation not found")
+    else:
+        if convo.session_id != session_id:
+            raise NotFoundError("Conversation not found")
     return convo
 
 
@@ -68,6 +76,7 @@ async def _run_producer(
     job_id: str,
     conversation_id: uuid.UUID,
     user_content: str,
+    user_id: str | None,
     session_id: str,
     llm_client: LLMClient,
     settings: Settings,
@@ -237,10 +246,10 @@ async def post_message(
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_factory),
     llm_client: LLMClient = Depends(get_llm_client),
 ) -> StreamingResponse:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     settings = get_settings()
 
-    convo = await _resolve_conversation(db, session_id, body.conversation_id)
+    convo = await _resolve_conversation(db, user_id, session_id, body.conversation_id)
 
     # Persist the user message before streaming starts.
     user_msg = Message(
@@ -262,7 +271,8 @@ async def post_message(
     j_key = job_key(job_id)
 
     # Owner record for the resume endpoint.
-    await redis.set(j_key, session_id, ex=ACTIVE_TTL)
+    owner = user_id or session_id
+    await redis.set(j_key, owner, ex=ACTIVE_TTL)
 
     # Emit job_started synchronously so the stream exists before we hand the
     # consumer a response — avoids the consumer racing ahead of an empty key.
@@ -285,6 +295,7 @@ async def post_message(
             job_id,
             convo.id,
             body.content,
+            user_id,
             session_id,
             llm_client,
             settings,
@@ -313,7 +324,7 @@ async def stream_resume(
     job_id: str,
     redis: Redis = Depends(get_redis),
 ) -> StreamingResponse:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     s_key = stream_key(job_id)
     j_key = job_key(job_id)
 
@@ -325,7 +336,8 @@ async def stream_resume(
         # backlog is gone — clients can't resume.
         raise GoneError("Stream no longer available")
 
-    if owner != session_id:
+    expected_owner = user_id or session_id
+    if owner != expected_owner:
         # Wrong session: return 404 to avoid letting callers enumerate job ids.
         raise NotFoundError("Stream not found")
 

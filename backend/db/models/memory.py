@@ -34,6 +34,7 @@ class AgentMemory(Base):
     __tablename__ = "agent_memories"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     session_id: Mapped[str] = mapped_column(Text, nullable=False)
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(),

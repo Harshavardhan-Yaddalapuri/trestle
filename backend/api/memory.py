@@ -16,6 +16,7 @@ from backend.core.errors import NotFoundError, ValidationError
 from backend.core.logging import get_logger
 from backend.db.models.memory import AgentMemory
 from backend.db.session import get_db
+from backend.middleware.auth import get_identity, owner_clause
 from backend.schemas.memory import MemoryContext, MemoryIn, MemoryListResponse, MemoryOut
 from backend.services.memory import build_memory_context
 
@@ -73,8 +74,9 @@ async def create_memory(
     body: MemoryIn,
     db: AsyncSession = Depends(get_db),
 ) -> MemoryOut:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     mem = AgentMemory(
+        user_id=user_id,
         session_id=session_id,
         conversation_id=body.conversation_id,
         kind=body.kind,
@@ -99,11 +101,10 @@ async def list_memories(
     cursor: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> MemoryListResponse:
-    session_id = request.state.session_id
     now = _utcnow()
 
     stmt = select(AgentMemory).where(
-        AgentMemory.session_id == session_id,
+        owner_clause(AgentMemory.user_id, AgentMemory.session_id, request),
         AgentMemory.deleted_at.is_(None),
         sa.or_(AgentMemory.expires_at.is_(None), AgentMemory.expires_at > now),
     )
@@ -153,11 +154,10 @@ async def get_memory_context(
     conversation_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> MemoryContext:
-    session_id = request.state.session_id
     now = _utcnow()
 
     stmt = select(AgentMemory).where(
-        AgentMemory.session_id == session_id,
+        owner_clause(AgentMemory.user_id, AgentMemory.session_id, request),
         AgentMemory.deleted_at.is_(None),
         sa.or_(AgentMemory.expires_at.is_(None), AgentMemory.expires_at > now),
     )
@@ -181,13 +181,11 @@ async def delete_memory(
     memory_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    session_id = request.state.session_id
-
     result = await db.execute(
         sa.update(AgentMemory)
         .where(
             AgentMemory.id == memory_id,
-            AgentMemory.session_id == session_id,
+            owner_clause(AgentMemory.user_id, AgentMemory.session_id, request),
             AgentMemory.deleted_at.is_(None),
         )
         .values(deleted_at=_utcnow())

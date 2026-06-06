@@ -27,6 +27,7 @@ class Profile(Base):
     __tablename__ = "profiles"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     session_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
     founder_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     company_name: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -26,7 +26,8 @@ class GrantTrack(Base):
     __tablename__ = "grant_tracks"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     grant_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(),
         ForeignKey("grants.id", ondelete="CASCADE"),
@@ -50,7 +51,6 @@ class GrantTrack(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        Index("ix_grant_tracks_session_id", "session_id"),
         Index("ix_grant_tracks_session_deleted", "session_id", "deleted_at"),
     )
 
@@ -59,7 +59,8 @@ class GrantDismissal(Base):
     __tablename__ = "grant_dismissals"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     grant_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(),
         ForeignKey("grants.id", ondelete="CASCADE"),
@@ -74,7 +75,7 @@ class GrantDismissal(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        Index("ix_grant_dismissals_session_id", "session_id"),
+        Index("ix_grant_dismissals_session_grant", "session_id", "grant_id"),
         CheckConstraint(
             "reason IS NULL OR reason IN ("
             "'not_eligible','not_interested','already_applied','too_competitive','other')",

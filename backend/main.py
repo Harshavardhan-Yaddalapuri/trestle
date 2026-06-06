@@ -14,6 +14,7 @@ from backend.core.logging import configure_logging, get_logger
 from backend.db.session import dispose_engine, get_engine, init_engine
 from backend.middleware.request_id import RequestIdMiddleware
 from backend.middleware.session import SessionMiddleware
+from backend.middleware.auth import SupabaseAuthMiddleware
 from backend.redis_client import close_redis, init_redis
 from backend.services.scheduler import url_verify_scheduler
 from backend.services.skills_registry import list_skills
@@ -71,9 +72,11 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Trestle API", lifespan=lifespan)
 
-    # Middleware order: outermost is added last in Starlette, so add CORS last
-    # so it wraps everything (and so OPTIONS preflights don't pay session cost).
+    # Middleware order (Starlette: last added wraps outermost, first added innermost):
+    # Routes -> Session -> Auth -> RequestId -> CORS (outermost)
+    # This means CORS handles OPTIONS first, then RequestId, then Auth, then Session.
     app.add_middleware(SessionMiddleware)
+    app.add_middleware(SupabaseAuthMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
         CORSMiddleware,

@@ -13,6 +13,7 @@ from backend.db.models.grant import Grant
 from backend.db.models.grant_association import GrantDismissal, GrantTrack
 from backend.db.models.profile import Profile
 from backend.db.session import get_db
+from backend.middleware.auth import get_identity, owner_clause
 from backend.schemas.grant import (
     GrantDetail,
     GrantListResponse,
@@ -164,10 +165,12 @@ async def match_grants(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MatchResponse:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
 
     profile_result = await db.execute(
-        sa.select(Profile).where(Profile.session_id == session_id)
+        sa.select(Profile).where(
+            owner_clause(Profile.user_id, Profile.session_id, request)
+        )
     )
     profile = profile_result.scalar_one_or_none()
 
@@ -175,14 +178,14 @@ async def match_grants(
 
     dismissed_result = await db.execute(
         sa.select(GrantDismissal.grant_id).where(
-            GrantDismissal.session_id == session_id
+            owner_clause(GrantDismissal.user_id, GrantDismissal.session_id, request)
         )
     )
     dismissed_ids: set[uuid.UUID] = {row[0] for row in dismissed_result.all()}
 
     tracked_result = await db.execute(
         sa.select(GrantTrack.grant_id).where(
-            GrantTrack.session_id == session_id,
+            owner_clause(GrantTrack.user_id, GrantTrack.session_id, request),
             GrantTrack.deleted_at.is_(None),
         )
     )
@@ -247,14 +250,14 @@ async def track_grant(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> GrantTrackOut:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     grant = await _resolve_grant(body.grant_id, db)
     now = _utcnow()
 
     # Look for any existing row (active or soft-deleted) for this (session, grant).
     existing_result = await db.execute(
         sa.select(GrantTrack).where(
-            GrantTrack.session_id == session_id,
+            owner_clause(GrantTrack.user_id, GrantTrack.session_id, request),
             GrantTrack.grant_id == grant.id,
         )
     )
@@ -265,12 +268,13 @@ async def track_grant(
         await db.execute(
             sa.update(GrantTrack)
             .where(GrantTrack.id == track.id)
-            .values(note=body.note, updated_at=now, deleted_at=None)
+            .values(note=body.note, updated_at=now, deleted_at=None, user_id=user_id)
         )
         await db.commit()
         await db.refresh(track)
     else:
         track = GrantTrack(
+            user_id=user_id,
             session_id=session_id,
             grant_id=grant.id,
             note=body.note,
@@ -296,14 +300,14 @@ async def untrack_grant(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     grant = await _resolve_grant(grant_ref, db)
     now = _utcnow()
 
     result = await db.execute(
         sa.update(GrantTrack)
         .where(
-            GrantTrack.session_id == session_id,
+            owner_clause(GrantTrack.user_id, GrantTrack.session_id, request),
             GrantTrack.grant_id == grant.id,
             GrantTrack.deleted_at.is_(None),
         )
@@ -322,13 +326,13 @@ async def list_tracked(
     cursor: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> GrantTrackListResponse:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
 
     stmt = (
         sa.select(GrantTrack, Grant)
         .join(Grant, GrantTrack.grant_id == Grant.id)
         .where(
-            GrantTrack.session_id == session_id,
+            owner_clause(GrantTrack.user_id, GrantTrack.session_id, request),
             GrantTrack.deleted_at.is_(None),
         )
     )
@@ -387,13 +391,13 @@ async def dismiss_grant(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> GrantDismissalOut:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     grant = await _resolve_grant(body.grant_id, db)
     now = _utcnow()
 
     existing_result = await db.execute(
         sa.select(GrantDismissal).where(
-            GrantDismissal.session_id == session_id,
+            owner_clause(GrantDismissal.user_id, GrantDismissal.session_id, request),
             GrantDismissal.grant_id == grant.id,
         )
     )
@@ -403,12 +407,13 @@ async def dismiss_grant(
         await db.execute(
             sa.update(GrantDismissal)
             .where(GrantDismissal.id == dismissal.id)
-            .values(reason=body.reason)
+            .values(reason=body.reason, user_id=user_id)
         )
         await db.commit()
         await db.refresh(dismissal)
     else:
         dismissal = GrantDismissal(
+            user_id=user_id,
             session_id=session_id,
             grant_id=grant.id,
             reason=body.reason,
@@ -432,12 +437,12 @@ async def undismiss_grant(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
     grant = await _resolve_grant(grant_ref, db)
 
     result = await db.execute(
         sa.delete(GrantDismissal).where(
-            GrantDismissal.session_id == session_id,
+            owner_clause(GrantDismissal.user_id, GrantDismissal.session_id, request),
             GrantDismissal.grant_id == grant.id,
         )
     )
@@ -454,12 +459,14 @@ async def list_dismissed(
     cursor: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> GrantDismissalListResponse:
-    session_id = request.state.session_id
+    user_id, session_id = get_identity(request)
 
     stmt = (
         sa.select(GrantDismissal, Grant)
         .join(Grant, GrantDismissal.grant_id == Grant.id)
-        .where(GrantDismissal.session_id == session_id)
+        .where(
+            owner_clause(GrantDismissal.user_id, GrantDismissal.session_id, request),
+        )
     )
 
     if cursor is not None:
@@ -506,26 +513,7 @@ async def list_dismissed(
     return GrantDismissalListResponse(items=items, next_cursor=next_cursor)
 
 
-# ── Grant lookup helper ───────────────────────────────────────────────────────
-
-
-async def _resolve_grant(grant_ref: str, db: AsyncSession) -> Grant:
-    result = await db.execute(
-        sa.select(Grant).where(Grant.source_id == grant_ref)
-    )
-    grant = result.scalar_one_or_none()
-
-    if grant is None:
-        try:
-            grant_id = uuid.UUID(grant_ref)
-        except ValueError:
-            raise NotFoundError("Grant not found")
-        grant = await db.get(Grant, grant_id)
-
-    if grant is None:
-        raise NotFoundError("Grant not found")
-
-    return grant
+# ── Detail / verification ─────────────────────────────────────────────────────
 
 
 @router.get("/{grant_ref}", response_model=GrantDetail)
@@ -538,9 +526,35 @@ async def get_grant(
 
 
 @router.get("/{grant_ref}/verification", response_model=GrantVerificationStatus)
-async def get_grant_verification(
+async def get_verification_status(
     grant_ref: str,
     db: AsyncSession = Depends(get_db),
 ) -> GrantVerificationStatus:
     grant = await _resolve_grant(grant_ref, db)
-    return GrantVerificationStatus.model_validate(grant)
+    return GrantVerificationStatus(
+        source_status=grant.source_status,
+        last_verified_at=grant.last_verified_at.isoformat() if grant.last_verified_at else None,
+        consecutive_failures=grant.consecutive_failures,
+        last_verification_error=grant.last_verification_error,
+    )
+
+
+async def _resolve_grant(ref: str, db: AsyncSession) -> Grant:
+    """Resolve a grant by UUID or source_id."""
+    conv = None
+    try:
+        conv = uuid.UUID(ref)
+    except ValueError:
+        pass
+    if conv is not None:
+        grant = await db.get(Grant, conv)
+        if grant is not None:
+            return grant
+    # Fallback: lookup by source_id
+    result = await db.execute(
+        sa.select(Grant).where(Grant.source_id == ref)
+    )
+    grant = result.scalar_one_or_none()
+    if grant is None:
+        raise NotFoundError("Grant not found")
+    return grant

@@ -46,6 +46,11 @@ def mock_settings_env(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
     monkeypatch.setenv("OLLAMA_MODEL", "test-model")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+
+    # Clear settings cache so env changes take effect
+    from backend.core.config import get_settings
+    get_settings.cache_clear()
 
 
 # ============================================================
@@ -96,8 +101,79 @@ def mock_supabase():
 def mock_supabase_client():
     """Mock create_client to return a chainable mock."""
     mock = _make_fresh_mock_supabase()
-    with patch("app.services.supabase.create_client", return_value=mock):
+    with patch("backend.api.auth.create_client", return_value=mock):
         yield mock
+
+
+@pytest.fixture
+def mock_supabase_httpx_signup_success():
+    """Mock httpx.AsyncClient.post for Supabase signup to return success."""
+    import httpx
+
+    async def _mock_post(*args, **kwargs):
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.json.return_value = {
+            "user": {"id": "supabase-uid-123"},
+            "session": {"access_token": "fake-access", "refresh_token": "fake-refresh"},
+        }
+        return mock
+
+    with patch.object(httpx.AsyncClient, "post", new=_mock_post):
+        yield
+
+
+@pytest.fixture
+def mock_supabase_httpx_login_success():
+    """Mock httpx.AsyncClient.post for Supabase login to return success."""
+    import httpx
+
+    async def _mock_post(*args, **kwargs):
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.json.return_value = {
+            "access_token": "fake-access-token",
+            "refresh_token": "fake-refresh-token",
+            "expires_in": 3600,
+            "user": {"id": "supabase-uid-123"},
+        }
+        return mock
+
+    with patch.object(httpx.AsyncClient, "post", new=_mock_post):
+        yield
+
+
+@pytest.fixture
+def mock_supabase_httpx_magiclink_success():
+    """Mock httpx.AsyncClient.post for Supabase magic-link to return success."""
+    import httpx
+
+    async def _mock_post(*args, **kwargs):
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.json.return_value = {}
+        return mock
+
+    with patch.object(httpx.AsyncClient, "post", new=_mock_post):
+        yield
+
+
+@pytest.fixture
+def mock_successful_jwt_verification(monkeypatch):
+    """Mock Supabase JWT verification to always return a valid payload."""
+    import backend.middleware.auth as auth_mod
+
+    def mock_verify(token: str) -> dict:
+        return {
+            "sub": "user-123",
+            "email": "test@example.com",
+            "role": "authenticated",
+            "exp": 9999999999,
+            "iat": 1700000000,
+        }
+
+    monkeypatch.setattr(auth_mod, "_verify_token", mock_verify)
+    return ("user-123", "test@example.com")
 
 
 # ============================================================
