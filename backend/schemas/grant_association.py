@@ -5,7 +5,7 @@ import binascii
 import json
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -24,6 +24,20 @@ DismissalReason = Literal[
     "not_eligible", "not_interested", "already_applied", "too_competitive", "other"
 ]
 
+LifecycleStatus = Literal[
+    "interested",
+    "researching",
+    "drafting",
+    "submitted",
+    "under_review",
+    "awarded",
+    "rejected",
+    "withdrawn",
+    "abandoned",
+]
+
+TransitionKind = Literal["user", "automated", "system"]
+
 
 class GrantTrackIn(BaseModel):
     grant_id: str
@@ -36,6 +50,13 @@ class GrantTrackOut(BaseModel):
     note: str | None
     created_at: datetime
     updated_at: datetime
+    lifecycle_status: LifecycleStatus
+    lifecycle_updated_at: datetime
+    lifecycle_metadata: dict[str, Any]
+
+
+# GrantTrackWithLifecycle is GrantTrackOut — all tracks carry lifecycle fields.
+GrantTrackWithLifecycle = GrantTrackOut
 
 
 class GrantTrackListResponse(BaseModel):
@@ -64,6 +85,31 @@ class GrantDismissalItem(BaseModel):
 
 class GrantDismissalListResponse(BaseModel):
     items: list[GrantDismissalItem]
+    next_cursor: str | None
+
+
+class GrantLifecycleTransitionIn(BaseModel):
+    to_status: LifecycleStatus
+    note: str | None = Field(None, max_length=500)
+    metadata: dict[str, Any] = {}
+
+
+class GrantLifecycleEventOut(BaseModel):
+    id: UUID
+    from_status: LifecycleStatus | None
+    to_status: LifecycleStatus
+    transition_kind: TransitionKind
+    note: str | None
+    metadata: dict[str, Any]
+    created_at: datetime
+
+
+class GrantLifecycleEventListResponse(BaseModel):
+    events: list[GrantLifecycleEventOut]
+
+
+class GrantLifecycleListResponse(BaseModel):
+    items: list[GrantTrackWithLifecycle]
     next_cursor: str | None
 
 

@@ -1,15 +1,20 @@
 """Shared test fixtures for Trestle backend tests.
 
-Merged: async DB/LLM/Redis fixtures (orchestrator base) + Supabase mock fixtures (main).
-"""
+Async DB/LLM/Redis fixtures (orchestrator base) + Supabase JWT mock (main).
 
+The Supabase-only auth world means the only auth mock we need is
+`mock_successful_jwt_verification` (patches `backend.middleware.auth._verify_token`).
+The historical `mock_supabase_httpx_*` and `mock_supabase_client` fixtures
+from the magic-link era were removed — they patched symbols
+(`backend.api.auth.create_client`, `httpx.AsyncClient.post`) that no
+longer exist in the Supabase-only flow.
+"""
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
 from typing import Any, AsyncIterator
-from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -36,6 +41,7 @@ from backend.services.llm.fake import FakeLLMClient
 # Env overrides (from main)
 # ============================================================
 
+
 @pytest.fixture(autouse=True)
 def mock_settings_env(monkeypatch):
     """Override settings so tests don't need a real .env file."""
@@ -50,117 +56,23 @@ def mock_settings_env(monkeypatch):
 
     # Clear settings cache so env changes take effect
     from backend.core.config import get_settings
+
     get_settings.cache_clear()
 
 
 # ============================================================
-# Supabase mock fixtures (from main)
+# Supabase JWT mock (the only auth mock in the Supabase-only world)
 # ============================================================
-
-def _make_fresh_mock_supabase():
-    """Create a fresh supabase mock with chainable API."""
-    mock = MagicMock()
-    mock_execute = MagicMock()
-    mock_execute.data = []
-    mock_execute.count = 0
-
-    def _chain(*args, **kwargs):
-        return mock
-
-    mock.table = MagicMock(side_effect=_chain)
-    mock.select = MagicMock(side_effect=_chain)
-    mock.insert = MagicMock(side_effect=_chain)
-    mock.update = MagicMock(side_effect=_chain)
-    mock.delete = MagicMock(side_effect=_chain)
-    mock.upsert = MagicMock(side_effect=_chain)
-    mock.eq = MagicMock(side_effect=_chain)
-    mock.neq = MagicMock(side_effect=_chain)
-    mock.gt = MagicMock(side_effect=_chain)
-    mock.lt = MagicMock(side_effect=_chain)
-    mock.gte = MagicMock(side_effect=_chain)
-    mock.lte = MagicMock(side_effect=_chain)
-    mock.like = MagicMock(side_effect=_chain)
-    mock.ilike = MagicMock(side_effect=_chain)
-    mock.is_ = MagicMock(side_effect=_chain)
-    mock.in_ = MagicMock(side_effect=_chain)
-    mock.order = MagicMock(side_effect=_chain)
-    mock.limit = MagicMock(side_effect=_chain)
-    mock.range = MagicMock(side_effect=_chain)
-    mock.single = MagicMock(side_effect=_chain)
-    mock.execute = mock_execute
-    return mock
-
-
-@pytest.fixture
-def mock_supabase():
-    """Return a fully chainable supabase mock."""
-    return _make_fresh_mock_supabase()
-
-
-@pytest.fixture
-def mock_supabase_client():
-    """Mock create_client to return a chainable mock."""
-    mock = _make_fresh_mock_supabase()
-    with patch("backend.api.auth.create_client", return_value=mock):
-        yield mock
-
-
-@pytest.fixture
-def mock_supabase_httpx_signup_success():
-    """Mock httpx.AsyncClient.post for Supabase signup to return success."""
-    import httpx
-
-    async def _mock_post(*args, **kwargs):
-        mock = MagicMock()
-        mock.status_code = 200
-        mock.json.return_value = {
-            "user": {"id": "supabase-uid-123"},
-            "session": {"access_token": "fake-access", "refresh_token": "fake-refresh"},
-        }
-        return mock
-
-    with patch.object(httpx.AsyncClient, "post", new=_mock_post):
-        yield
-
-
-@pytest.fixture
-def mock_supabase_httpx_login_success():
-    """Mock httpx.AsyncClient.post for Supabase login to return success."""
-    import httpx
-
-    async def _mock_post(*args, **kwargs):
-        mock = MagicMock()
-        mock.status_code = 200
-        mock.json.return_value = {
-            "access_token": "fake-access-token",
-            "refresh_token": "fake-refresh-token",
-            "expires_in": 3600,
-            "user": {"id": "supabase-uid-123"},
-        }
-        return mock
-
-    with patch.object(httpx.AsyncClient, "post", new=_mock_post):
-        yield
-
-
-@pytest.fixture
-def mock_supabase_httpx_magiclink_success():
-    """Mock httpx.AsyncClient.post for Supabase magic-link to return success."""
-    import httpx
-
-    async def _mock_post(*args, **kwargs):
-        mock = MagicMock()
-        mock.status_code = 200
-        mock.json.return_value = {}
-        return mock
-
-    with patch.object(httpx.AsyncClient, "post", new=_mock_post):
-        yield
 
 
 @pytest.fixture
 def mock_successful_jwt_verification(monkeypatch):
-    """Mock Supabase JWT verification to always return a valid payload."""
+    """Mock Supabase JWT verification to always return a valid payload.
+
+    Patches `backend.middleware.auth._verify_token`. The middleware
+    then binds a `UserCtx` derived from the returned payload to
+    `request.state.user`, exactly as it would in production.
+    """
     import backend.middleware.auth as auth_mod
 
     def mock_verify(token: str) -> dict:
@@ -179,6 +91,7 @@ def mock_successful_jwt_verification(monkeypatch):
 # ============================================================
 # Async DB fixtures (orchestrator base)
 # ============================================================
+
 
 @pytest_asyncio.fixture
 async def db_engine():
@@ -202,6 +115,7 @@ async def session_factory(db_engine) -> async_sessionmaker[AsyncSession]:
 # Redis + LLM fixtures (orchestrator base)
 # ============================================================
 
+
 @pytest_asyncio.fixture
 async def redis_client():
     """Fake Redis for pub/sub tests."""
@@ -224,6 +138,7 @@ def fake_llm():
 # ============================================================
 # HTTP client fixture (orchestrator base)
 # ============================================================
+
 
 @pytest_asyncio.fixture
 async def client(session_factory, redis_client, fake_llm) -> AsyncIterator[AsyncClient]:
@@ -254,6 +169,7 @@ async def client(session_factory, redis_client, fake_llm) -> AsyncIterator[Async
 # Grant seed fixture
 # ============================================================
 
+
 @pytest_asyncio.fixture
 async def seeded_grants(session_factory) -> dict:
     """Load seed grants into DB. Returns {inserted, updated, grants}."""
@@ -269,6 +185,7 @@ async def seeded_grants(session_factory) -> dict:
 # ============================================================
 # Helper functions
 # ============================================================
+
 
 async def collect_sse(response) -> list[dict[str, Any]]:
     """Drain an SSE response into [{id, event, data}] frames."""

@@ -50,6 +50,19 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _track_out(track: GrantTrack, grant: Grant) -> GrantTrackOut:
+    return GrantTrackOut(
+        id=track.id,
+        grant=GrantSummary.model_validate(grant),
+        note=track.note,
+        created_at=track.created_at,
+        updated_at=track.updated_at,
+        lifecycle_status=track.lifecycle_status,  # type: ignore[arg-type]
+        lifecycle_updated_at=track.lifecycle_updated_at,
+        lifecycle_metadata=track.lifecycle_metadata or {},
+    )
+
+
 def _list_filter_string(col, value: str, is_postgres: bool) -> sa.ColumnElement:
     """Return WHERE predicate for "value is in the StringList column"."""
     if is_postgres:
@@ -59,6 +72,26 @@ def _list_filter_string(col, value: str, is_postgres: bool) -> sa.ColumnElement:
         sa.cast(col, sa.Text).like(f'%"{value}"%'),
         sa.cast(col, sa.Text).like('%"any"%'),
     )
+
+
+async def _resolve_grant(grant_ref: str, db: AsyncSession) -> Grant:
+    """Resolve a grant by UUID or source_id."""
+    result = await db.execute(
+        sa.select(Grant).where(Grant.source_id == grant_ref)
+    )
+    grant = result.scalar_one_or_none()
+
+    if grant is None:
+        try:
+            grant_id = uuid.UUID(grant_ref)
+        except ValueError:
+            raise NotFoundError("Grant not found")
+        grant = await db.get(Grant, grant_id)
+
+    if grant is None:
+        raise NotFoundError("Grant not found")
+
+    return grant
 
 
 @router.get("", response_model=GrantListResponse)
@@ -71,12 +104,16 @@ async def list_grants(
     location: str | None = Query(default=None),
     status: str = Query(default=_DEFAULT_STATUS),
     q: str | None = Query(default=None),
+    include_duplicates: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> GrantListResponse:
     conn = await db.connection()
     is_postgres = conn.dialect.name == "postgresql"
 
     stmt = sa.select(Grant).where(Grant.status == status)
+
+    if not include_duplicates:
+        stmt = stmt.where(Grant.is_duplicate_of.is_(None))
 
     if type is not None:
         stmt = stmt.where(Grant.type == type)
@@ -196,6 +233,7 @@ async def match_grants(
         sa.select(Grant)
         .where(Grant.status == "active")
         .where(sa.or_(Grant.deadline.is_(None), Grant.deadline >= today))
+        .where(Grant.is_duplicate_of.is_(None))
         .limit(1000)
     )
 
@@ -265,6 +303,7 @@ async def track_grant(
 
     if track is not None:
         # Update active row or undelete soft-deleted row.
+        # Preserve lifecycle state on re-track (funnel survives un-tracking).
         await db.execute(
             sa.update(GrantTrack)
             .where(GrantTrack.id == track.id)
@@ -280,18 +319,13 @@ async def track_grant(
             note=body.note,
             created_at=now,
             updated_at=now,
+            lifecycle_updated_at=now,
         )
         db.add(track)
         await db.commit()
         await db.refresh(track)
 
-    return GrantTrackOut(
-        id=track.id,
-        grant=GrantSummary.model_validate(grant),
-        note=track.note,
-        created_at=track.created_at,
-        updated_at=track.updated_at,
-    )
+    return _track_out(track, grant)
 
 
 @router.delete("/track/{grant_ref}", status_code=204)
@@ -364,16 +398,7 @@ async def list_tracked(
     has_more = len(rows) > limit
     rows = rows[:limit]
 
-    items = [
-        GrantTrackOut(
-            id=track.id,
-            grant=GrantSummary.model_validate(grant),
-            note=track.note,
-            created_at=track.created_at,
-            updated_at=track.updated_at,
-        )
-        for track, grant in rows
-    ]
+    items = [_track_out(track, grant) for track, grant in rows]
 
     next_cursor = (
         encode_assoc_cursor(rows[-1][0].updated_at, rows[-1][0].id) if has_more else None
@@ -537,24 +562,3 @@ async def get_verification_status(
         consecutive_failures=grant.consecutive_failures,
         last_verification_error=grant.last_verification_error,
     )
-
-
-async def _resolve_grant(ref: str, db: AsyncSession) -> Grant:
-    """Resolve a grant by UUID or source_id."""
-    conv = None
-    try:
-        conv = uuid.UUID(ref)
-    except ValueError:
-        pass
-    if conv is not None:
-        grant = await db.get(Grant, conv)
-        if grant is not None:
-            return grant
-    # Fallback: lookup by source_id
-    result = await db.execute(
-        sa.select(Grant).where(Grant.source_id == ref)
-    )
-    grant = result.scalar_one_or_none()
-    if grant is None:
-        raise NotFoundError("Grant not found")
-    return grant

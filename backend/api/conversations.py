@@ -128,20 +128,15 @@ async def get_conversation(
     user_id, session_id = get_identity(request)
     clause = owner_clause(Conversation.user_id, Conversation.session_id, request)
 
-    convo = await db.get(Conversation, conversation_id)
-    # 404 covers all three "no" cases: missing, soft-deleted, wrong session.
-    # Returning the same error means callers can't enumerate ids by behavior.
-    if convo is None or convo.deleted_at is not None:
-        raise NotFoundError("Conversation not found")
-    # Re-check ownership via clause (user_id or session_id match)
-    result = await db.execute(
-        sa.select(Conversation).where(
-            Conversation.id == conversation_id,
-            clause,
-            Conversation.deleted_at.is_(None),
-        )
+    # Fetch the conversation, applying the ownership clause and checking for soft-deletion.
+    stmt = sa.select(Conversation).where(
+        Conversation.id == conversation_id,
+        clause,  # This handles user_id OR session_id ownership
+        Conversation.deleted_at.is_(None),
     )
-    if result.scalar_one_or_none() is None:
+    convo = await db.scalar(stmt)
+
+    if convo is None:
         raise NotFoundError("Conversation not found")
 
     msg_result = await db.execute(

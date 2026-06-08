@@ -1,6 +1,3 @@
-"""Session middleware — provides anonymous session ID via cookie or header."""
-from __future__ import annotations
-
 import uuid
 
 import structlog

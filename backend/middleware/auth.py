@@ -1,14 +1,20 @@
 """Supabase JWT validation middleware.
 
-Verifies `Authorization: Bearer *** headers using Supabase's JWKS.
-Sets `request.state.user_id` to the Supabase `sub` claim when valid.
-Anonymous requests (no header) are allowed through — session cookie still
-provides `request.state.session_id` from SessionMiddleware.
+Verifies `Authorization: Bearer <jwt>` headers using Supabase's JWKS.
+Sets `request.state.user_id` to the Supabase `sub` claim when valid,
+and binds a Supabase-shaped `UserCtx` to `request.state.user` so
+existing dependencies (require_user) keep working.
+Anonymous requests (no header) are allowed through — the session
+middleware still provides `request.state.session_id`.
 """
 from __future__ import annotations
 
+import dataclasses
+import uuid
+
 import jwt
 import sqlalchemy as sa
+import structlog
 from jwt import PyJWKClient
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -66,6 +72,51 @@ def _verify_token(token: str) -> dict:
     return payload
 
 
+@dataclasses.dataclass
+class UserCtx:
+    """Supabase-shaped authenticated user context.
+
+    The `id` field is the Supabase `sub` claim parsed to a UUID when
+    possible. Email fields come from the JWT's `email` / `email_verified`
+    claims. `display_name` is not part of the standard Supabase token,
+    so it is left None here and resolved from the `users` table by
+    the calling endpoint if it needs more.
+
+    `email_normalized` is the lowercased email; it is exposed for
+    future lookup-by-email flows (e.g. cross-account merge) but is
+    not currently persisted on the `users` row (0015 stores raw
+    `email`). Callers that need to match by email should normalize
+    on the fly until a migration adds the column.
+    """
+
+    id: uuid.UUID
+    sub: str
+    email: str | None
+    email_normalized: str | None
+    email_verified: bool
+    display_name: str | None = None
+
+
+def _build_user_ctx(payload: dict) -> UserCtx:
+    sub = payload.get("sub") or ""
+    email = payload.get("email")
+    email_verified = bool(payload.get("email_verified"))
+    try:
+        uid = uuid.UUID(sub)
+    except (ValueError, TypeError):
+        # Fall back to a deterministic UUIDv5 from the sub so the
+        # downstream user table can use it as a stable FK.
+        uid = uuid.uuid5(uuid.NAMESPACE_URL, f"supabase:{sub}")
+    return UserCtx(
+        id=uid,
+        sub=sub,
+        email=email,
+        email_normalized=email.lower() if email else None,
+        email_verified=email_verified,
+        display_name=None,
+    )
+
+
 class SupabaseAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         auth_header = request.headers.get("Authorization", "")
@@ -74,9 +125,11 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
             if token:
                 try:
                     payload = _verify_token(token)
-                    user_id = payload.get("sub")
-                    if user_id:
-                        request.state.user_id = user_id
+                    sub = payload.get("sub")
+                    if sub:
+                        request.state.user_id = sub
+                        request.state.user = _build_user_ctx(payload)
+                        structlog.contextvars.bind_contextvars(user_id=sub)
                 except jwt.ExpiredSignatureError:
                     request.state.auth_error = "expired_token"
                 except jwt.InvalidTokenError as exc:
@@ -86,3 +139,11 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
                     logger.warning("jwt_verification_error", error=str(exc))
                     request.state.auth_error = "verification_failed"
         return await call_next(request)
+
+
+__all__ = [
+    "SupabaseAuthMiddleware",
+    "UserCtx",
+    "get_identity",
+    "owner_clause",
+]

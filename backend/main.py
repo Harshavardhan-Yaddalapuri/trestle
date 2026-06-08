@@ -12,11 +12,15 @@ from backend.core.config import get_settings
 from backend.core.errors import register_exception_handlers
 from backend.core.logging import configure_logging, get_logger
 from backend.db.session import dispose_engine, get_engine, init_engine
+from backend.middleware.auth import SupabaseAuthMiddleware
 from backend.middleware.request_id import RequestIdMiddleware
 from backend.middleware.session import SessionMiddleware
-from backend.middleware.auth import SupabaseAuthMiddleware
 from backend.redis_client import close_redis, init_redis
-from backend.services.scheduler import url_verify_scheduler
+from backend.services.scheduler import (
+    ingest_scheduler,
+    lifecycle_auto_scheduler,
+    url_verify_scheduler,
+)
 from backend.services.skills_registry import list_skills
 
 _GRANTS_SEED_DIR = Path(__file__).parent / "seed" / "grants"
@@ -46,21 +50,47 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("grants_seed_failed")
 
-    scheduler_task: asyncio.Task | None = None
+    url_verify_task: asyncio.Task | None = None
     if settings.URL_VERIFY_ENABLED:
-        scheduler_task = asyncio.create_task(url_verify_scheduler())
+        url_verify_task = asyncio.create_task(url_verify_scheduler())
+
+    lifecycle_task: asyncio.Task | None = None
+    if settings.LIFECYCLE_AUTO_TRANSITIONS_ENABLED:
+        lifecycle_task = asyncio.create_task(lifecycle_auto_scheduler())
+
+    ingest_task: asyncio.Task | None = None
+    if settings.INGEST_ENABLED:
+        ingest_task = asyncio.create_task(ingest_scheduler())
 
     logger.info("startup_complete")
     try:
         yield
     finally:
-        if scheduler_task is not None:
-            scheduler_task.cancel()
+        if url_verify_task is not None:
+            url_verify_task.cancel()
             try:
-                await scheduler_task
+                await url_verify_task
             except asyncio.CancelledError:
                 pass
             logger.info("url_verify_scheduler_stopped")
+
+        if lifecycle_task is not None:
+            lifecycle_task.cancel()
+            try:
+                await lifecycle_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("lifecycle_auto_scheduler_stopped")
+
+        if ingest_task is not None:
+            ingest_task.cancel()
+            try:
+                await ingest_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("ingest_scheduler_stopped")
+
+
         await close_redis()
         await dispose_engine()
         logger.info("shutdown_complete")

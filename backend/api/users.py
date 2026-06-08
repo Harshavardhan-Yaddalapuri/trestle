@@ -8,12 +8,32 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models.profile import Profile
+from backend.db.models.user import User
 from backend.db.session import get_db
+from backend.middleware.auth import UserCtx, get_identity, owner_clause
+from backend.schemas.alerts import AlertPreferencesIn, AlertPreferencesOut
 from backend.schemas.profile import ProfileIn, ProfileOut
 
-from backend.middleware.auth import get_identity, owner_clause
-
 router = APIRouter(prefix="/users", tags=["users"])
+
+_PREF_DEFAULTS = {
+    "deadline_reminders": True,
+    "new_grant_matches": True,
+    "check_ins": True,
+}
+
+
+def _require_user(request: Request) -> UserCtx:
+    """Dependency: returns the UserCtx bound by SupabaseAuthMiddleware.
+
+    Raises 401 if no authenticated user is on the request.
+    """
+    user = getattr(request.state, "user", None)
+    if user is None:
+        from backend.core.errors import AuthenticationError
+
+        raise AuthenticationError("Authentication required")
+    return user
 
 
 @router.get("/profile", response_model=ProfileOut)
@@ -99,3 +119,62 @@ async def upsert_profile(
     )
     profile = result.scalar_one()
     return ProfileOut.model_validate(profile)
+
+
+@router.get("/alert-preferences", response_model=AlertPreferencesOut)
+async def get_alert_preferences(
+    request: Request,
+    current_user: UserCtx = Depends(_require_user),
+    db: AsyncSession = Depends(get_db),
+) -> AlertPreferencesOut:
+    result = await db.execute(sa.select(User).where(User.id == current_user.id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        # User row not yet provisioned — return defaults.
+        return AlertPreferencesOut(
+            deadline_reminders=_PREF_DEFAULTS["deadline_reminders"],
+            new_grant_matches=_PREF_DEFAULTS["new_grant_matches"],
+            check_ins=_PREF_DEFAULTS["check_ins"],
+        )
+
+    prefs = user.alert_prefs or {}
+    return AlertPreferencesOut(
+        deadline_reminders=prefs.get("deadline_reminders", _PREF_DEFAULTS["deadline_reminders"]),
+        new_grant_matches=prefs.get("new_grant_matches", _PREF_DEFAULTS["new_grant_matches"]),
+        check_ins=prefs.get("check_ins", _PREF_DEFAULTS["check_ins"]),
+    )
+
+
+@router.put("/alert-preferences", response_model=AlertPreferencesOut)
+async def update_alert_preferences(
+    body: AlertPreferencesIn,
+    request: Request,
+    current_user: UserCtx = Depends(_require_user),
+    db: AsyncSession = Depends(get_db),
+) -> AlertPreferencesOut:
+    result = await db.execute(sa.select(User).where(User.id == current_user.id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        # Provision user row on first preference update.
+        user = User(
+            id=current_user.id,
+            sub=current_user.sub,
+            email=current_user.email,
+            alert_prefs={},
+        )
+        db.add(user)
+
+    update = body.model_dump(exclude_unset=True, exclude_none=True)
+    existing = dict(user.alert_prefs or {})
+    existing.update(update)
+    user.alert_prefs = existing
+    user.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return AlertPreferencesOut(
+        deadline_reminders=existing.get("deadline_reminders", _PREF_DEFAULTS["deadline_reminders"]),
+        new_grant_matches=existing.get("new_grant_matches", _PREF_DEFAULTS["new_grant_matches"]),
+        check_ins=existing.get("check_ins", _PREF_DEFAULTS["check_ins"]),
+    )

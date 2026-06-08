@@ -6,3 +6,9 @@ __pycache__
 .venv
 *.log
 pgdata
+
+# Local tooling artifacts
+.antigravitycli/
+
+# Tests moved out of collection (magic-link / dead-code path)
+.trestle-disabled/
