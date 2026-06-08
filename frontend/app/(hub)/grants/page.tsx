@@ -1,25 +1,54 @@
 import Link from "next/link";
 import { listTrackedGrants } from "@/lib/data/tracked-grants";
+import { sortTrackedGrants } from "@/lib/data/grants-sort";
+import { isMockDataSource } from "@/lib/config/data-source";
 import {
   GRANT_LIFECYCLE_STATUSES,
   GRANT_LIFECYCLE_LABELS,
-  isGrantLifecycleStatus,
 } from "@/lib/domain/lifecycle";
-import { LifecycleBadge } from "@/components/lifecycle-badge";
+import {
+  buildGrantsListHref,
+  parseGrantsListQuery,
+} from "@/lib/grants-list-query";
+import GrantsTable from "./_components/GrantsTable";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-  title: "My Grants — Trestle",
+  title: "Grants — Trestle",
 };
 
 type PageProps = {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    all?: string;
+    sort?: string;
+    dir?: string;
+  }>;
 };
 
 export default async function GrantsPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const status = isGrantLifecycleStatus(sp.status) ? sp.status : undefined;
-  const grants = await listTrackedGrants({ status });
+  const query = parseGrantsListQuery(sp);
+  const { status } = query;
+  const showAll = query.all ?? false;
+
+  let grants: Awaited<ReturnType<typeof listTrackedGrants>> = [];
+  let loadError: string | null = null;
+
+  try {
+    grants = await listTrackedGrants({
+      status,
+      all: showAll && !status,
+    });
+    if (query.sort && query.dir) {
+      grants = sortTrackedGrants(grants, query.sort, query.dir);
+    }
+  } catch (err) {
+    loadError =
+      err instanceof Error ? err.message : "Could not load grants from the API.";
+  }
+
+  const usingApi = !isMockDataSource();
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -28,64 +57,49 @@ export default async function GrantsPage({ searchParams }: PageProps) {
           className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold"
           style={{ fontSize: "28px", lineHeight: "36px" }}
         >
-          My Grants
+          Grants
         </h1>
         <p className="text-on-surface-variant mt-1 text-sm md:text-base">
-          Filter by lifecycle status. Data loads from the mock adapter until the API is ready.
+          {usingApi
+            ? "Tracked grants from your workspace, filtered by lifecycle status."
+            : "Mock data — set NEXT_PUBLIC_DATA_SOURCE=api to use the backend."}
         </p>
       </div>
 
+      {loadError ? (
+        <div
+          className="rounded-lg border border-error/30 bg-error-container/30 px-4 py-3 text-sm text-on-error-container"
+          role="alert"
+        >
+          {loadError}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
-        <FilterChip href="/grants" active={!status}>
+        <FilterChip
+          href={buildGrantsListHref({ sort: query.sort, dir: query.dir, all: true })}
+          active={showAll && !status}
+        >
           All
         </FilterChip>
+        <FilterChip
+          href={buildGrantsListHref({ sort: query.sort, dir: query.dir })}
+          active={!showAll && !status}
+        >
+          In progress
+        </FilterChip>
         {GRANT_LIFECYCLE_STATUSES.map((s) => (
-          <FilterChip key={s} href={`/grants?status=${s}`} active={status === s}>
+          <FilterChip
+            key={s}
+            href={buildGrantsListHref({ sort: query.sort, dir: query.dir, status: s })}
+            active={status === s}
+          >
             {GRANT_LIFECYCLE_LABELS[s]}
           </FilterChip>
         ))}
       </div>
 
-      <div className="rounded-xl border border-outline-variant overflow-hidden bg-surface-container-lowest">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-surface-container text-on-surface-variant text-xs uppercase tracking-wide">
-            <tr>
-              <th className="px-4 py-3 font-medium">Grant</th>
-              <th className="px-4 py-3 font-medium hidden sm:table-cell">Amount</th>
-              <th className="px-4 py-3 font-medium hidden md:table-cell">Deadline</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grants.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-on-surface-variant">
-                  No grants in this status.
-                </td>
-              </tr>
-            ) : (
-              grants.map((g) => (
-                <tr key={g.id} className="border-t border-outline-variant hover:bg-surface-variant/40">
-                  <td className="px-4 py-3">
-                    <Link href={`/grants/${g.id}`} className="font-medium text-primary hover:underline">
-                      {g.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-on-surface-variant hidden sm:table-cell">
-                    {g.amountLabel ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-on-surface-variant hidden md:table-cell">
-                    {g.deadlineLabel ?? "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <LifecycleBadge status={g.status} />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <GrantsTable grants={grants} query={query} usingApi={usingApi} />
     </div>
   );
 }

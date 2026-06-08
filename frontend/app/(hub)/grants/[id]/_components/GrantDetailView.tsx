@@ -29,7 +29,7 @@ export default function GrantDetailView({ grant }: { grant: TrackedGrantDetail }
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link href="/grants" className="text-sm text-primary font-medium hover:underline">
-            ← My Grants
+            ← Grants
           </Link>
           <h1
             className="font-[family-name:var(--font-plus-jakarta)] text-primary font-bold mt-2"
