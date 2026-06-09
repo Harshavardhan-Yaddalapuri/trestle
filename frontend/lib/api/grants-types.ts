@@ -43,3 +43,39 @@ export interface ApiGrantLifecycleListResponse {
   items: ApiGrantTrackOut[];
   next_cursor: string | null;
 }
+
+export interface ApiGrantDetail {
+  id: string;
+  source_id: string;
+  name: string;
+  type: string;
+  description: string;
+  url: string;
+  application_url: string | null;
+  amount_min: number | null;
+  amount_max: number | null;
+  deadline: string | null;
+  rolling: boolean;
+  stage: string[] | null;
+  industry: string[] | null;
+  location: string[] | null;
+  eligibility: Record<string, unknown>;
+  provider_name: string;
+  provider_type: string | null;
+  status: string;
+  amount_display: string;
+}
+
+export interface ApiGrantLifecycleEventOut {
+  id: string;
+  from_status: GrantLifecycleStatus | null;
+  to_status: GrantLifecycleStatus;
+  transition_kind: "user" | "automated" | "system";
+  note: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ApiGrantLifecycleEventListResponse {
+  events: ApiGrantLifecycleEventOut[];
+}
