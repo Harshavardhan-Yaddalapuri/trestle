@@ -1,8 +1,14 @@
-import { fetchGrantLifecycleList } from "@/lib/api/grants";
+import { ApiError } from "@/lib/api-error";
+import {
+  fetchGrantDetail,
+  fetchGrantLifecycleEvents,
+  fetchGrantLifecycleList,
+  findGrantTrackByRef,
+} from "@/lib/api/grants";
 import { isMockDataSource } from "@/lib/config/data-source";
 import type { GrantLifecycleStatus } from "@/lib/domain/lifecycle";
 import type { TrackedGrantDetail, TrackedGrantSummary } from "@/lib/domain/tracked-grant";
-import { mapGrantTrackToSummary } from "@/lib/data/grants-mapper";
+import { mapGrantTrackToDetail, mapGrantTrackToSummary } from "@/lib/data/grants-mapper";
 import { MOCK_TRACKED_GRANTS } from "@/lib/data/mock/seed-data";
 
 export interface ListTrackedGrantsFilter {
@@ -64,9 +70,36 @@ export async function listTrackedGrants(
   return rows.map(toSummary);
 }
 
+async function getTrackedGrantDetailFromApi(
+  id: string,
+): Promise<TrackedGrantDetail | null> {
+  const track = await findGrantTrackByRef(id);
+  if (!track) return null;
+
+  const grantRef = track.grant.source_id;
+  const [grantDetail, eventsResult] = await Promise.all([
+    fetchGrantDetail(grantRef).catch((err) => {
+      if (err instanceof ApiError && err.status === 404) return null;
+      throw err;
+    }),
+    fetchGrantLifecycleEvents(grantRef).catch((err) => {
+      if (err instanceof ApiError && err.status === 404) {
+        return { events: [] };
+      }
+      throw err;
+    }),
+  ]);
+
+  return mapGrantTrackToDetail(track, grantDetail, eventsResult.events);
+}
+
 export async function getTrackedGrantDetail(
   id: string,
 ): Promise<TrackedGrantDetail | null> {
+  if (!isMockDataSource()) {
+    return getTrackedGrantDetailFromApi(id);
+  }
+
   await Promise.resolve();
   return (
     MOCK_TRACKED_GRANTS.find((g) => g.id === id || g.grantId === id) ?? null
