@@ -1,28 +1,13 @@
 import { cookies } from "next/headers";
 
-export const ANON_SESSION_COOKIE = "trestle_anon_session";
+import { ANON_SESSION_COOKIE } from "@/lib/session-constants";
 
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+export { ANON_SESSION_COOKIE } from "@/lib/session-constants";
 
-/**
- * Stable anonymous session for server-side API calls.
- * Mirrors backend `SessionMiddleware` cookie name and max-age.
- */
-export async function getOrCreateServerSessionId(): Promise<string> {
+/** Read anonymous session id from request cookies (bootstrapped in middleware). */
+export async function getServerSessionId(): Promise<string | undefined> {
   const store = await cookies();
-  const existing = store.get(ANON_SESSION_COOKIE)?.value;
-  if (existing) {
-    return existing;
-  }
-
-  const id = crypto.randomUUID();
-  store.set(ANON_SESSION_COOKIE, id, {
-    path: "/",
-    maxAge: MAX_AGE_SECONDS,
-    sameSite: "lax",
-    httpOnly: false,
-  });
-  return id;
+  return store.get(ANON_SESSION_COOKIE)?.value;
 }
 
 /** Cookie header for outbound API requests from Server Components. */
@@ -30,8 +15,8 @@ export async function buildApiCookieHeader(): Promise<string> {
   const store = await cookies();
   const pairs = store.getAll().map((c) => `${c.name}=${c.value}`);
   if (!pairs.some((p) => p.startsWith(`${ANON_SESSION_COOKIE}=`))) {
-    const id = await getOrCreateServerSessionId();
-    pairs.push(`${ANON_SESSION_COOKIE}=${id}`);
+    // Middleware should have set trestle_anon_session; ephemeral fallback only.
+    pairs.push(`${ANON_SESSION_COOKIE}=${crypto.randomUUID()}`);
   }
   return pairs.join("; ");
 }
