@@ -1,17 +1,45 @@
-"""Shared test fixtures for Trestle v1 backend tests."""
+"""Shared test fixtures for Trestle backend tests.
 
+Async DB/LLM/Redis fixtures (orchestrator base) + Supabase JWT mock (main).
+
+The Supabase-only auth world means the only auth mock we need is
+`mock_successful_jwt_verification` (patches `backend.middleware.auth._verify_token`).
+The historical `mock_supabase_httpx_*` and `mock_supabase_client` fixtures
+from the magic-link era were removed — they patched symbols
+(`backend.api.auth.create_client`, `httpx.AsyncClient.post`) that no
+longer exist in the Supabase-only flow.
+"""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID
+from typing import Any, AsyncIterator
 
 import pytest
-from fastapi.testclient import TestClient
+import pytest_asyncio
+from fakeredis import FakeAsyncRedis
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 # Ensure backend is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from backend.db.base import Base
+from backend.db.session import get_db, get_db_factory
+from backend.main import create_app
+from backend.redis_client import get_redis
+from backend.services.llm.dependency import get_llm_client
+from backend.services.llm.fake import FakeLLMClient
+
+
+# ============================================================
+# Env overrides (from main)
+# ============================================================
 
 
 @pytest.fixture(autouse=True)
@@ -24,162 +52,187 @@ def mock_settings_env(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
     monkeypatch.setenv("OLLAMA_MODEL", "test-model")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+
+    # Clear settings cache so env changes take effect
+    from backend.core.config import get_settings
+
+    get_settings.cache_clear()
 
 
-def _make_fresh_mock_supabase():
-    """Create a fresh supabase mock with chainable API."""
-    mock = MagicMock()
-    mock_execute = MagicMock()
-    mock_execute.data = []
-    mock_execute.count = 0
-
-    def _chain(*args, **kwargs):
-        return mock
-
-    mock.table = MagicMock(side_effect=_chain)
-    mock.select = MagicMock(return_value=mock)
-    mock.insert = MagicMock(return_value=mock)
-    mock.update = MagicMock(return_value=mock)
-    mock.delete = MagicMock(return_value=mock)
-    mock.eq = MagicMock(return_value=mock)
-    mock.neq = MagicMock(return_value=mock)
-    mock.is_ = MagicMock(return_value=mock)
-    mock.limit = MagicMock(return_value=mock)
-    mock.order = MagicMock(return_value=mock)
-    mock.range = MagicMock(return_value=mock)
-    mock.single = MagicMock(return_value=mock)
-    mock.execute = MagicMock(return_value=mock_execute)
-    mock.rpc = MagicMock(return_value=mock_execute)
-    return mock
+# ============================================================
+# Supabase JWT mock (the only auth mock in the Supabase-only world)
+# ============================================================
 
 
-@pytest.fixture(autouse=True)
-def mock_supabase_client():
-    """Globally mock the supabase client so no real DB calls are made.
+@pytest.fixture
+def mock_successful_jwt_verification(monkeypatch):
+    """Mock Supabase JWT verification to always return a valid payload.
 
-    Patches both the source module AND any module that imported supabase
-    via ``from app.database import supabase`` (which creates a local
-    reference that won't see the source patch).  Each call returns a
-    fresh mock to avoid state leakage across tests.
-
-    Applied AUTOMATICALLY to every test — no test should ever make real
-    Supabase calls. Tests that need specific DB responses configure the
-    mock's return values before executing.
+    Patches `backend.middleware.auth._verify_token`. The middleware
+    then binds a `UserCtx` derived from the returned payload to
+    `request.state.user`, exactly as it would in production.
     """
-    fresh = _make_fresh_mock_supabase()
-    with patch("app.database.supabase", fresh), \
-         patch("app.routers.auth.supabase", fresh), \
-         patch("app.main.supabase", fresh):
-        yield fresh
+    import backend.middleware.auth as auth_mod
 
-
-# ─── Auth helpers ────────────────────────────────────────────────────────────
-
-VALID_USER_UUID = UUID("12345678-1234-1234-1234-123456789abc")
-VALID_SUPABASE_UID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-VALID_EMAIL = "test@example.com"
-
-
-@pytest.fixture
-def mock_successful_jwt_verification():
-    """Patch verify_supabase_jwt to return a valid user."""
-    with patch(
-        "app.middleware.auth.verify_supabase_jwt",
-        new_callable=AsyncMock,
-    ) as mock_verify:
-        mock_verify.return_value = (VALID_SUPABASE_UID, VALID_EMAIL)
-        yield mock_verify
-
-
-@pytest.fixture
-def mock_supabase_httpx_signup_success():
-    """Mock httpx.AsyncClient.post for signup returning success."""
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 201
-        mock_resp.json.return_value = {
-            "id": str(VALID_SUPABASE_UID),
-            "email": VALID_EMAIL,
+    def mock_verify(token: str) -> dict:
+        return {
+            "sub": "user-123",
+            "email": "test@example.com",
+            "role": "authenticated",
+            "exp": 9999999999,
+            "iat": 1700000000,
         }
-        mock_post.return_value = mock_resp
-        yield mock_post
+
+    monkeypatch.setattr(auth_mod, "_verify_token", mock_verify)
+    return ("user-123", "test@example.com")
 
 
-@pytest.fixture
-def mock_supabase_httpx_login_success():
-    """Mock httpx.AsyncClient.post for login returning success."""
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "access_token": "fake-access-token",
-            "refresh_token": "fake-refresh-token",
-            "expires_in": 3600,
-            "user": {
-                "id": str(VALID_SUPABASE_UID),
-                "email": VALID_EMAIL,
-            },
-        }
-        mock_post.return_value = mock_resp
-        yield mock_post
+# ============================================================
+# Async DB fixtures (orchestrator base)
+# ============================================================
 
 
-@pytest.fixture
-def mock_supabase_httpx_magiclink_success():
-    """Mock httpx.AsyncClient.post for magic link sending."""
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {}
-        mock_post.return_value = mock_resp
-        yield mock_post
+@pytest_asyncio.fixture
+async def db_engine():
+    """In-memory SQLite engine with all tables created."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
 
 
-@pytest.fixture(autouse=True)
-def mock_all_httpx():
-    """Mock ALL httpx.AsyncClient methods to prevent actual network calls.
-
-    Applied AUTOMATICALLY to every test. Tests that need SPECIFIC
-    httpx responses (signup, login, magic link) use their own fixtures
-    that override this one via nested patching.
-
-    The default mock returns a generic 200 with a json body that is
-    structured enough to not crash the most common auth endpoints
-    (signup needs ``id``, login needs ``user.id``).
-    """
-    def _make_generic_response():
-        mock = MagicMock()
-        mock.status_code = 200
-        mock.json.return_value = {
-            "id": str(VALID_SUPABASE_UID),
-            "email": VALID_EMAIL,
-            "user": {
-                "id": str(VALID_SUPABASE_UID),
-                "email": VALID_EMAIL,
-            },
-            "access_token": "fake-access-token",
-            "refresh_token": "fake-refresh-token",
-            "expires_in": 3600,
-        }
-        return mock
-
-    async def mock_post_success(*args, **kwargs):
-        return _make_generic_response()
-
-    async def mock_get_success(*args, **kwargs):
-        return _make_generic_response()
-
-    with patch("httpx.AsyncClient.post", new=mock_post_success), \
-         patch("httpx.AsyncClient.get", new=mock_get_success):
-        yield
+@pytest_asyncio.fixture
+async def session_factory(db_engine) -> async_sessionmaker[AsyncSession]:
+    """Async session factory — rollback between tests."""
+    return async_sessionmaker(db_engine, expire_on_commit=False, class_=AsyncSession)
 
 
-# ─── TestClient ──────────────────────────────────────────────────────────────
+# ============================================================
+# Redis + LLM fixtures (orchestrator base)
+# ============================================================
 
 
-@pytest.fixture
-def client(mock_settings_env):
-    """FastAPI TestClient for integration-style tests."""
-    from app.main import app
+@pytest_asyncio.fixture
+async def redis_client():
+    """Fake Redis for pub/sub tests."""
+    client = FakeAsyncRedis(decode_responses=True)
+    try:
+        yield client
+    finally:
+        try:
+            await client.aclose()
+        except AttributeError:
+            await client.close()
 
-    return TestClient(app)
+
+@pytest_asyncio.fixture
+def fake_llm():
+    """Default FakeLLMClient. Override per-test with custom instance."""
+    return FakeLLMClient()
+
+
+# ============================================================
+# HTTP client fixture (orchestrator base)
+# ============================================================
+
+
+@pytest_asyncio.fixture
+async def client(session_factory, redis_client, fake_llm) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client with all deps overridden for orchestrator tests."""
+    app = create_app()
+
+    async def _override_db():
+        async with session_factory() as session:
+            yield session
+
+    async def _override_redis():
+        yield redis_client
+
+    def _override_factory():
+        return session_factory
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_redis] = _override_redis
+    app.dependency_overrides[get_db_factory] = _override_factory
+    app.dependency_overrides[get_llm_client] = lambda: fake_llm
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        yield ac
+
+
+# ============================================================
+# Grant seed fixture
+# ============================================================
+
+
+@pytest_asyncio.fixture
+async def seeded_grants(session_factory) -> dict:
+    """Load seed grants into DB. Returns {inserted, updated, grants}."""
+    from backend.seed.loader import load_grants_from_dir, upsert_grants
+
+    seed_dir = Path(__file__).parent.parent / "seed" / "grants"
+    grants = load_grants_from_dir(seed_dir)
+    async with session_factory() as session:
+        inserted, updated = await upsert_grants(session, grants)
+    return {"inserted": inserted, "updated": updated, "grants": grants}
+
+
+# ============================================================
+# Helper functions
+# ============================================================
+
+
+async def collect_sse(response) -> list[dict[str, Any]]:
+    """Drain an SSE response into [{id, event, data}] frames."""
+    events: list[dict[str, Any]] = []
+    current_id: str | None = None
+    current_event = "message"
+    current_data = ""
+    async for line in response.aiter_lines():
+        if line.startswith("id: "):
+            current_id = line[4:]
+        elif line.startswith("event: "):
+            current_event = line[7:]
+        elif line.startswith("data: "):
+            current_data += line[6:]
+        elif line == "":
+            if current_data:
+                try:
+                    parsed = json.loads(current_data)
+                except json.JSONDecodeError:
+                    parsed = current_data
+                events.append(
+                    {"id": current_id, "event": current_event, "data": parsed}
+                )
+            current_id = None
+            current_event = "message"
+            current_data = ""
+    return events
+
+
+def make_client_factory(session_factory, redis_client, llm_client):
+    """Create an AsyncClient with custom LLM client for orchestrator tests."""
+    app = create_app()
+
+    async def _override_db():
+        async with session_factory() as session:
+            yield session
+
+    async def _override_redis():
+        yield redis_client
+
+    def _override_factory():
+        return session_factory
+
+    app.dependency_overrides[get_db] = _override_db
+    app.dependency_overrides[get_redis] = _override_redis
+    app.dependency_overrides[get_db_factory] = _override_factory
+    app.dependency_overrides[get_llm_client] = lambda: llm_client
+
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://testserver")

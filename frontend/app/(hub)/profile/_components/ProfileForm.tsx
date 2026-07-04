@@ -21,18 +21,38 @@ function linesToList(s: string): string[] {
     .filter(Boolean);
 }
 
-export default function ProfileForm({ initial }: { initial: FounderProfile }) {
+function listToLines(arr: string[] | null | undefined): string {
+  return (arr || []).join("\n");
+}
+
+interface ProfileFormProps {
+  initial: FounderProfile;
+  onSave: (profile: FounderProfile) => Promise<void>;
+}
+
+export default function ProfileForm({ initial, onSave }: ProfileFormProps) {
   const [form, setForm] = useState(initial);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   function update<K extends keyof FounderProfile>(key: K, value: FounderProfile[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaved(true);
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(form);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -42,7 +62,12 @@ export default function ProfileForm({ initial }: { initial: FounderProfile }) {
           className="rounded-lg bg-secondary-container text-on-secondary-container px-4 py-3 text-sm"
           role="status"
         >
-          Preview saved in-session only. A founder profile API will persist these fields.
+          Profile saved successfully.
+        </p>
+      )}
+      {error && (
+        <p className="rounded-lg bg-error-container text-on-error-container px-4 py-3 text-sm" role="alert">
+          {error}
         </p>
       )}
 
@@ -92,7 +117,7 @@ export default function ProfileForm({ initial }: { initial: FounderProfile }) {
             <Textarea
               id="industries"
               rows={3}
-              value={form.industries.join("\n")}
+              value={listToLines(form.industries)}
               onChange={(e) => update("industries", linesToList(e.target.value))}
             />
           </Field>
@@ -178,7 +203,7 @@ export default function ProfileForm({ initial }: { initial: FounderProfile }) {
             <Textarea
               id="grantTypes"
               rows={3}
-              value={form.grantTypes.join("\n")}
+              value={listToLines(form.grantTypes)}
               onChange={(e) => update("grantTypes", linesToList(e.target.value))}
             />
           </Field>
@@ -187,14 +212,16 @@ export default function ProfileForm({ initial }: { initial: FounderProfile }) {
             <Textarea
               id="geo"
               rows={2}
-              value={form.geographicPreferences.join("\n")}
+              value={listToLines(form.geographicPreferences)}
               onChange={(e) => update("geographicPreferences", linesToList(e.target.value))}
             />
           </Field>
         </CardContent>
       </Card>
 
-      <Button type="submit">Save profile (preview)</Button>
+      <Button type="submit" disabled={saving}>
+        {saving ? "Saving…" : "Save profile"}
+      </Button>
     </form>
   );
 }
