@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     ARQ_QUEUE_NAME: str = Field(default="trestle:alerts")
     ARQ_JOB_TIMEOUT_SECONDS: int = Field(default=60)
     ARQ_MAX_TRIES: int = Field(default=3)
+    ADMIN_API_KEY: SecretStr | None = Field(default=None)
 
     INGEST_ENABLED: bool = Field(default=True)
     INGEST_INTERVAL_HOURS: int = Field(default=24)
@@ -102,6 +103,14 @@ class Settings(BaseSettings):
             raise ValueError(
                 "AUTH_IP_HASH_PEPPER must be set in non-development environments"
             )
+        if (
+            not self.is_dev
+            and (
+                self.ADMIN_API_KEY is None
+                or not self.ADMIN_API_KEY.get_secret_value().strip()
+            )
+        ):
+            raise ValueError("ADMIN_API_KEY must be set in non-development environments")
         if self.EMAIL_PROVIDER == "resend" and (
             self.RESEND_API_KEY is None
             or not self.RESEND_API_KEY.get_secret_value()
