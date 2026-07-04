@@ -7,6 +7,7 @@ import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.errors import AuthenticationError
 from backend.db.models.profile import Profile
 from backend.db.models.user import User
 from backend.db.session import get_db
@@ -30,8 +31,6 @@ def _require_user(request: Request) -> UserCtx:
     """
     user = getattr(request.state, "user", None)
     if user is None:
-        from backend.core.errors import AuthenticationError
-
         raise AuthenticationError("Authentication required")
     return user
 

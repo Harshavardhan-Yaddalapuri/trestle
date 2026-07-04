@@ -1,9 +1,7 @@
-"""Admin endpoints — no auth gate.
-
-TODO: Add authentication before any production deploy.
-"""
+"""Admin endpoints for operational maintenance tasks."""
 from __future__ import annotations
 
+import secrets
 import uuid
 
 import sqlalchemy as sa
@@ -12,7 +10,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.core.config import Settings, get_settings
-from backend.core.errors import ConflictError, NotFoundError, ValidationError
+from backend.core.errors import AuthenticationError, ConflictError, NotFoundError, ValidationError
 from backend.core.logging import get_logger
 from backend.db.models.alert_delivery import AlertDelivery
 from backend.db.models.ingest_run import IngestRun
@@ -58,7 +56,27 @@ from backend.services.lifecycle.auto_transitions import (
 )
 from backend.services.url_verify import _LOCK_KEY, run_verification_sweep
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+def _require_admin(request: Request, settings: Settings = Depends(get_settings)) -> None:
+    """Guard admin routes.
+
+    In development, if ADMIN_API_KEY is unset, allow access to keep local workflows lightweight.
+    In non-development (or when configured), require X-Admin-Key to match ADMIN_API_KEY.
+    """
+    configured_key = (
+        settings.ADMIN_API_KEY.get_secret_value().strip()
+        if settings.ADMIN_API_KEY is not None
+        else ""
+    )
+    if settings.is_dev and not configured_key:
+        return
+
+    provided = request.headers.get("X-Admin-Key", "").strip()
+    if not configured_key or not secrets.compare_digest(provided, configured_key):
+        logger.warning("admin_auth_failed", path=str(request.url.path))
+        raise AuthenticationError("Admin authentication required")
+
+
+router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(_require_admin)])
 logger = get_logger(__name__)
 
 _MAX_RUNS = 20
@@ -187,10 +205,7 @@ async def trigger_lifecycle_run(
 async def list_recent_alerts(
     db: AsyncSession = Depends(get_db),
 ) -> AlertDeliveriesResponse:
-    """Last 50 alert deliveries. user_id truncated to first 8 chars (PII minimization).
-
-    TODO: Add authentication before production deploy.
-    """
+    """Last 50 alert deliveries. user_id truncated to first 8 chars (PII minimization)."""
     result = await db.execute(
         sa.select(AlertDelivery)
         .order_by(AlertDelivery.created_at.desc())
@@ -226,10 +241,7 @@ async def trigger_alert_scan(
     db_factory: async_sessionmaker[AsyncSession] = Depends(get_db_factory),
     settings: Settings = Depends(get_settings),
 ) -> TriggerAlertResponse:
-    """Manually trigger an alert scan and run sends inline (for testing and recovery).
-
-    TODO: Add authentication before production deploy.
-    """
+    """Manually trigger an alert scan and run sends inline (for testing and recovery)."""
     if alert_kind not in _ALERT_KINDS:
         raise ValidationError(
             f"alert_kind must be one of: {', '.join(sorted(_ALERT_KINDS))}",
@@ -284,10 +296,7 @@ async def list_ingest_runs(
     source: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> IngestRunsResponse:
-    """Last 20 ingest runs, optionally filtered by source.
-
-    TODO: Add authentication before production deploy.
-    """
+    """Last 20 ingest runs, optionally filtered by source."""
     query = (
         sa.select(IngestRun)
         .order_by(IngestRun.started_at.desc())
@@ -305,10 +314,7 @@ async def get_ingest_run(
     run_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ) -> IngestRunDetail:
-    """Full detail for a single ingest run.
-
-    TODO: Add authentication before production deploy.
-    """
+    """Full detail for a single ingest run."""
     run = await db.get(IngestRun, run_id)
     if run is None:
         raise NotFoundError("Ingest run not found")
@@ -332,8 +338,6 @@ async def trigger_ingest_run(
 
     409 if the source is already ingesting.
     404 if the source name is unknown.
-
-    TODO: Add authentication before production deploy.
     """
     if get_adapter(source) is None:
         raise NotFoundError(f"Unknown ingest source: {source}")
