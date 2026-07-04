@@ -1,15 +1,8 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { ApiError } from "@/lib/api-error";
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public body: unknown,
-    message?: string,
-  ) {
-    super(message || `API error ${status}`);
-    this.name = "ApiError";
-  }
-}
+export { ApiError };
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
