@@ -1,16 +1,25 @@
 import type { GrantLifecycleStatus } from "./lifecycle";
 
-/** User-scoped tracking row; `catalogResourceId` links to discovery catalog when available. */
+/** User-scoped tracking row from `GET /api/grants/lifecycle`. */
 export interface TrackedGrantSummary {
+  /** Grant catalog ref (`source_id`) — used in `/grants/[id]` URLs. */
   id: string;
+  /** `GrantTrack` row id from the API. */
+  trackId: string;
+  /** Grant UUID from the API. */
+  grantId: string;
   catalogResourceId: string | null;
   name: string;
   status: GrantLifecycleStatus;
   amountLabel: string | null;
+  /** `amount_min` from API (USD cents) for sorting; optional in mock rows. */
+  amountMin: number | null;
   deadlineLabel: string | null;
   /** ISO date for sorting */
   deadlineIso: string | null;
   updatedAt: string;
+  providerName?: string;
+  grantType?: string;
 }
 
 export type TimelineEventKind =

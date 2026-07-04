@@ -1,8 +1,36 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  ANON_SESSION_COOKIE,
+  ANON_SESSION_MAX_AGE_SECONDS,
+} from "@/lib/session-constants";
+
+const ANON_SESSION_COOKIE_OPTIONS = {
+  path: "/",
+  maxAge: ANON_SESSION_MAX_AGE_SECONDS,
+  sameSite: "lax" as const,
+  httpOnly: false,
+};
+
+/** Ensure request cookies carry a stable anon id for downstream Server Components. */
+function bootstrapAnonSession(request: NextRequest): void {
+  if (!request.cookies.get(ANON_SESSION_COOKIE)?.value) {
+    request.cookies.set(ANON_SESSION_COOKIE, crypto.randomUUID());
+  }
+}
+
+/** Mirror anon session onto the response (required when Supabase rebuilds the response). */
+function attachAnonSessionCookie(request: NextRequest, response: NextResponse): void {
+  const id = request.cookies.get(ANON_SESSION_COOKIE)?.value;
+  if (id) {
+    response.cookies.set(ANON_SESSION_COOKIE, id, ANON_SESSION_COOKIE_OPTIONS);
+  }
+}
+
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  bootstrapAnonSession(request);
+  let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,6 +48,7 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach((cookie: { name: string; value: string; options?: object }) =>
             supabaseResponse.cookies.set(cookie.name, cookie.value, cookie.options)
           );
+          attachAnonSessionCookie(request, response);
         },
       },
     }
@@ -48,7 +77,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(dashboardUrl);
   }
 
-  return supabaseResponse;
+  attachAnonSessionCookie(request, response);
+  return response;
 }
 
 export const config = {

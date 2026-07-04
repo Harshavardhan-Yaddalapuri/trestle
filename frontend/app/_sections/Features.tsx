@@ -27,11 +27,11 @@ export default function Features() {
               className="font-[family-name:var(--font-plus-jakarta)] font-bold text-on-surface"
               style={{ fontSize: "22px", lineHeight: "28px" }}
             >
-              Autonomous Discovery
+              Your founder assistant
             </h3>
             <p className="text-on-surface-variant mt-2 max-w-md">
-              Our agents crawl the web to find leads that match your ideal
-              customer profile with 98% accuracy.
+              Trestle is a personal assistant that learns about your startup through
+              natural conversation and proactively surfaces matching opportunities.
             </p>
           </div>
 
@@ -56,36 +56,36 @@ export default function Features() {
         <div className="flex flex-col gap-6" style={{ flex: "1 1 0%" }}>
           <div className="flex-1 bg-secondary-container rounded-2xl p-8 flex flex-col justify-center gap-4 overflow-hidden">
             <span className="material-symbols-outlined text-on-secondary-container" style={{ fontSize: "48px" }}>
-              monitoring
+              target
             </span>
             <div>
               <h3
                 className="font-[family-name:var(--font-plus-jakarta)] font-bold text-on-secondary-container"
                 style={{ fontSize: "22px", lineHeight: "28px" }}
               >
-                Event Tracking
+                Matched to your profile
               </h3>
               <p className="text-on-secondary-container/80 mt-2">
-                Real-time alerts for market changes, competitor moves, and social
-                mentions.
+                Grants and programs are scored against your stage, industry, location,
+                and eligibility—so you spend time on opportunities you can actually win.
               </p>
             </div>
           </div>
 
           <div className="flex-1 bg-surface-container-highest rounded-2xl p-8 flex flex-col justify-center gap-4 border border-outline-variant/20">
             <span className="material-symbols-outlined text-primary" style={{ fontSize: "48px" }}>
-              robot_2
+              assignment
             </span>
             <div>
               <h3
                 className="font-[family-name:var(--font-plus-jakarta)] font-bold text-on-surface"
                 style={{ fontSize: "22px", lineHeight: "28px" }}
               >
-                Trend Research
+                Grant pipeline
               </h3>
               <p className="text-on-surface-variant mt-2">
-                Deep-dive research agents that compile comprehensive reports on
-                emerging tech trends.
+                Track what you save—from researching and drafting through submitted
+                and awarded—so nothing slips past a deadline.
               </p>
             </div>
           </div>
