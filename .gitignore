@@ -5,6 +5,7 @@ __pycache__
 .next
 .venv
 *.log
+*.rdb
 pgdata
 
 # Local tooling artifacts
