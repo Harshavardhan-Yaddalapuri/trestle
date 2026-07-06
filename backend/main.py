@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.api import api_router
 from backend.api.health import root_router as health_root_router
-from backend.core.config import get_settings
+from backend.core.config import database_connection_hint, get_settings
 from backend.core.errors import register_exception_handlers
 from backend.core.logging import configure_logging, get_logger
 from backend.db.session import dispose_engine, get_engine, init_engine
@@ -36,6 +37,25 @@ async def lifespan(app: FastAPI):
     logger.info("skills_registered", count=len(registered), ids=[s.id for s in registered])
 
     settings = get_settings()
+    db_host = urlparse(settings.DATABASE_URL).hostname
+    logger.info("database_target", host=db_host)
+
+    try:
+        from sqlalchemy import text
+
+        factory = async_sessionmaker(
+            get_engine(), expire_on_commit=False, class_=AsyncSession
+        )
+        async with factory() as session:
+            await session.execute(text("SELECT 1"))
+        logger.info("database_connected")
+    except Exception as exc:
+        logger.error(
+            "database_connection_failed",
+            error=str(exc),
+            hint=database_connection_hint(exc),
+        )
+
     if settings.is_dev and _GRANTS_SEED_DIR.is_dir():
         try:
             from backend.seed.loader import load_grants_from_dir, upsert_grants

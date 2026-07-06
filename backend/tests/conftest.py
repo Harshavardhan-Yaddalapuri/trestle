@@ -48,6 +48,7 @@ def mock_settings_env(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_KEY", "test-service-key")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "test-anon-key")
+    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setenv("FRONTEND_URL", "http://localhost:3000")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
     monkeypatch.setenv("OLLAMA_MODEL", "test-model")

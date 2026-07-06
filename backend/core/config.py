@@ -1,8 +1,72 @@
 from functools import lru_cache
 from typing import List, Literal
+from urllib.parse import quote_plus, urlparse
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _supabase_project_ref(supabase_url: str) -> str:
+    host = urlparse(supabase_url).netloc
+    if not host.endswith(".supabase.co"):
+        raise ValueError(f"Invalid SUPABASE_URL host: {host}")
+    return host.removesuffix(".supabase.co")
+
+
+def normalize_database_url(url: str) -> str:
+    """Ensure SQLAlchemy async URL uses the asyncpg driver."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgresql://") and "+asyncpg" not in url:
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+def build_supabase_database_url(
+    supabase_url: str,
+    password: str,
+    *,
+    region: str = "us-east-1",
+    use_pooler: bool = True,
+    pooler_host: str | None = None,
+) -> str:
+    """Build a Postgres URL for Supabase-hosted databases.
+
+    Uses the IPv4-compatible Supavisor pooler by default — the direct
+    ``db.<ref>.supabase.co`` host is IPv6-only and fails DNS inside Docker.
+    """
+    ref = _supabase_project_ref(supabase_url)
+    encoded = quote_plus(password)
+    if pooler_host:
+        host = pooler_host
+        user = f"postgres.{ref}"
+    elif use_pooler:
+        host = f"aws-0-{region}.pooler.supabase.com"
+        user = f"postgres.{ref}"
+    else:
+        host = f"db.{ref}.supabase.co"
+        user = "postgres"
+    return f"postgresql+asyncpg://{user}:{encoded}@{host}:5432/postgres"
+
+
+def database_connection_hint(exc: BaseException) -> str:
+    """Actionable hint for common Supabase Postgres connection failures."""
+    msg = str(exc).lower()
+    if "name or service not known" in msg or "gaierror" in msg:
+        return (
+            "Database host did not resolve. Use the Supabase pooler host "
+            "(SUPABASE_DB_REGION or SUPABASE_DB_POOLER_HOST), not db.<ref>.supabase.co."
+        )
+    if "certificate verify failed" in msg or "sslcertverificationerror" in msg:
+        return "SSL verification failed — ensure ca-certificates is installed in the backend image."
+    if "tenant/user" in msg and "not found" in msg:
+        return (
+            "Supabase pooler rejected this project. Restore/unpause the project in "
+            "the Supabase dashboard, then set SUPABASE_DB_REGION from Connect → Pooler."
+        )
+    if "password authentication failed" in msg:
+        return "Check SUPABASE_DB_PASSWORD in .env (Dashboard → Database, not the API key)."
+    return "Verify DATABASE_URL or SUPABASE_URL + SUPABASE_DB_PASSWORD in .env."
 
 
 class Settings(BaseSettings):
@@ -15,9 +79,21 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(default="development")
     LOG_LEVEL: str = Field(default="INFO")
 
-    DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://trestle:trestle@localhost:5432/trestle"
-    )
+    # Supabase (auth + hosted Postgres)
+    SUPABASE_URL: str = Field(default="")
+    SUPABASE_SERVICE_KEY: SecretStr = Field(default=SecretStr(""))
+    SUPABASE_ANON_KEY: SecretStr | None = Field(default=None)
+    # Database password from Supabase Dashboard → Project Settings → Database
+    SUPABASE_DB_PASSWORD: SecretStr | None = Field(default=None)
+    # AWS region shown in Supabase Dashboard → Connect → Pooler
+    SUPABASE_DB_REGION: str = Field(default="us-east-1")
+    # Optional full pooler host override (e.g. aws-0-us-east-1.pooler.supabase.com)
+    SUPABASE_DB_POOLER_HOST: str | None = Field(default=None)
+    # Direct db.<ref>.supabase.co is IPv6-only; keep pooler enabled for Docker
+    SUPABASE_DB_USE_POOLER: bool = Field(default=True)
+
+    # Optional override; otherwise derived from SUPABASE_URL + SUPABASE_DB_PASSWORD
+    DATABASE_URL: str | None = Field(default=None)
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
 
     CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:3000"])
@@ -98,6 +174,35 @@ class Settings(BaseSettings):
     SBIRGOV_MAX_PAGES: int = Field(default=30)
 
     @model_validator(mode="after")
+    def _resolve_database_url(self) -> "Settings":
+        if self.DATABASE_URL:
+            object.__setattr__(
+                self, "DATABASE_URL", normalize_database_url(self.DATABASE_URL)
+            )
+            return self
+
+        if self.SUPABASE_URL and self.SUPABASE_DB_PASSWORD:
+            password = self.SUPABASE_DB_PASSWORD.get_secret_value()
+            if password:
+                object.__setattr__(
+                    self,
+                    "DATABASE_URL",
+                    build_supabase_database_url(
+                        self.SUPABASE_URL,
+                        password,
+                        region=self.SUPABASE_DB_REGION,
+                        use_pooler=self.SUPABASE_DB_USE_POOLER,
+                        pooler_host=self.SUPABASE_DB_POOLER_HOST,
+                    ),
+                )
+                return self
+
+        raise ValueError(
+            "Database not configured: set DATABASE_URL or "
+            "SUPABASE_URL + SUPABASE_DB_PASSWORD (Supabase Dashboard → Database)"
+        )
+
+    @model_validator(mode="after")
     def _check_required_secrets(self) -> "Settings":
         if not self.AUTH_IP_HASH_PEPPER.get_secret_value() and not self.is_dev:
             raise ValueError(
@@ -128,6 +233,18 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.ENVIRONMENT.lower() in {"dev", "development", "local"}
+
+    def database_connect_args(self) -> dict:
+        """Driver kwargs for create_async_engine (SSL required for Supabase)."""
+        args: dict = {"statement_cache_size": 0}
+        if self.DATABASE_URL and (
+            "supabase.co" in self.DATABASE_URL
+            or "pooler.supabase.com" in self.DATABASE_URL
+        ):
+            # asyncpg: 'require' encrypts without strict cert verification issues
+            # seen with ssl=True in slim Docker images talking to Supavisor.
+            args["ssl"] = "require"
+        return args
 
 
 @lru_cache(maxsize=1)
