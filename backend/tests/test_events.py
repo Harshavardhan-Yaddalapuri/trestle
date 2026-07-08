@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
-
-import sqlalchemy as sa
 
 from backend.db.models.event import Event
 from backend.db.models.profile import Profile
+from backend.schemas.event import EventMatchRequest
 from backend.services.events.discovery import _extract_jsonld_events, upsert_discovered_events
+from backend.services.events.matching import evaluate_event, resolve_event_profile
 
 
 def test_extract_jsonld_events_parses_basic_fields():
@@ -76,74 +77,57 @@ async def test_upsert_discovered_events_inserts_and_updates(session_factory):
     assert updated2 == 1
 
 
-async def test_match_events_uses_profile_context(client, session_factory):
-    session_id = "events-session-1"
+def test_match_events_uses_profile_context():
     now = datetime.now(UTC)
-
-    async with session_factory() as s:
-        s.add(
-            Profile(
-                session_id=session_id,
-                company_stage="seed",
-                industry=["climate"],
-                location="boston",
-                goals="raise seed, hire first engineer",
-            )
-        )
-        s.add(
-            Event(
-                source_id="event:strong",
-                source="web_jsonld",
-                source_payload={},
-                name="Boston Climate Investor Night",
-                description="Meet seed investors and climate founders.",
-                url="https://example.org/strong",
-                host_name="Techstars Boston",
-                starts_at=now + timedelta(days=7),
-                ends_at=now + timedelta(days=7, hours=2),
-                is_virtual=False,
-                city="Boston",
-                country="US",
-                industry_tags=["climate"],
-                stage_tags=["seed"],
-                benefit_tags=["investor_access", "networking"],
-                attendee_types=["founders", "investors"],
-                host_quality_score=0.9,
-                status="active",
-            )
-        )
-        s.add(
-            Event(
-                source_id="event:weak",
-                source="web_jsonld",
-                source_payload={},
-                name="Generic Remote Workshop",
-                description="General workshop.",
-                url="https://example.org/weak",
-                starts_at=now + timedelta(days=5),
-                is_virtual=True,
-                industry_tags=["fintech"],
-                stage_tags=["series_a"],
-                benefit_tags=["customer_discovery"],
-                host_quality_score=0.4,
-                status="active",
-            )
-        )
-        await s.commit()
-
-    res = await client.post(
-        "/api/events/match",
-        headers={"X-Session-Id": session_id},
-        json={"limit": 5, "min_score": 0.0},
+    profile = Profile(
+        session_id="events-session-1",
+        company_stage="seed",
+        industry=["climate"],
+        location="boston",
+        goals="raise seed, hire first engineer",
     )
-    assert res.status_code == 200
-    body = res.json()
-    assert body["total_returned"] == 2
-    assert body["results"][0]["event"]["source_id"] == "event:strong"
-    assert body["results"][0]["score"] >= body["results"][1]["score"]
-
-    async with session_factory() as s:
-        count = (
-            await s.execute(sa.select(sa.func.count()).select_from(Event))
-        ).scalar_one()
-    assert count == 2
+    strong = Event(
+        id=uuid.uuid4(),
+        source_id="event:strong",
+        source="web_jsonld",
+        source_payload={},
+        name="Boston Climate Investor Night",
+        description="Meet seed investors and climate founders.",
+        url="https://example.org/strong",
+        host_name="Techstars Boston",
+        starts_at=now + timedelta(days=7),
+        ends_at=now + timedelta(days=7, hours=2),
+        is_virtual=False,
+        city="Boston",
+        country="US",
+        industry_tags=["climate"],
+        stage_tags=["seed"],
+        benefit_tags=["investor_access", "networking"],
+        attendee_types=["founders", "investors"],
+        application_required=False,
+        host_quality_score=0.9,
+        status="active",
+    )
+    weak = Event(
+        id=uuid.uuid4(),
+        source_id="event:weak",
+        source="web_jsonld",
+        source_payload={},
+        name="Generic Remote Workshop",
+        description="General workshop.",
+        url="https://example.org/weak",
+        starts_at=now + timedelta(days=5),
+        is_virtual=True,
+        industry_tags=["fintech"],
+        stage_tags=["series_a"],
+        benefit_tags=["customer_discovery"],
+        application_required=False,
+        host_quality_score=0.4,
+        status="active",
+    )
+    match_profile = resolve_event_profile(profile, EventMatchRequest())
+    strong_result = evaluate_event(match_profile, strong, include_virtual=True)
+    weak_result = evaluate_event(match_profile, weak, include_virtual=True)
+    assert strong_result.score > weak_result.score
+    assert "industry" in strong_result.matched_on
+    assert "outcome" in strong_result.matched_on

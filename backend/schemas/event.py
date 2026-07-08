@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EventSummary(BaseModel):
@@ -32,6 +32,11 @@ class EventSummary(BaseModel):
     application_required: bool = False
     host_quality_score: float = 0.5
     status: str = "active"
+
+    @field_validator("industry_tags", "stage_tags", "benefit_tags", "attendee_types", mode="before")
+    @classmethod
+    def _none_to_empty_list(cls, value):
+        return [] if value is None else value
 
 
 class EventMatchRequest(BaseModel):

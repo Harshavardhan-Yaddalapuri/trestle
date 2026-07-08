@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str | None = Field(default=None)
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
 
-    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    CORS_ORIGINS: List[str] | str = Field(default_factory=lambda: ["http://localhost:3000"])
 
     SESSION_COOKIE_NAME: str = Field(default="trestle_anon_session")
     SESSION_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 30)
