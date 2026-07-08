@@ -173,6 +173,11 @@ class Settings(BaseSettings):
     SBIRGOV_PAGE_SIZE: int = Field(default=100)
     SBIRGOV_MAX_PAGES: int = Field(default=30)
 
+    EVENTS_ENABLED: bool = Field(default=False)
+    EVENTS_HTTP_TIMEOUT_SECONDS: float = Field(default=20.0)
+    EVENTS_DISCOVERY_INTERVAL_HOURS: int = Field(default=12)
+    EVENTS_SOURCE_URLS: str = Field(default="")
+
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":
         if self.DATABASE_URL:
@@ -233,6 +238,16 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.ENVIRONMENT.lower() in {"dev", "development", "local"}
+
+    @property
+    def EVENT_SOURCE_URLS_LIST(self) -> list[str]:
+        if not self.EVENTS_SOURCE_URLS.strip():
+            return []
+        return [
+            url.strip()
+            for url in self.EVENTS_SOURCE_URLS.split(",")
+            if url.strip()
+        ]
 
     def database_connect_args(self) -> dict:
         """Driver kwargs for create_async_engine (SSL required for Supabase)."""

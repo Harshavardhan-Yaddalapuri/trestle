@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from backend.api import admin, auth, chat, conversations, email, grants, health, lifecycle, memory, skills, users
+from backend.api import admin, auth, chat, conversations, email, events, grants, health, lifecycle, memory, skills, users
 
 api_router = APIRouter()
 api_router.include_router(health.api_router)
@@ -10,6 +10,7 @@ api_router.include_router(conversations.router)
 api_router.include_router(users.router)
 api_router.include_router(skills.router)
 api_router.include_router(grants.router)
+api_router.include_router(events.router)
 api_router.include_router(lifecycle.router)
 api_router.include_router(admin.router)
 api_router.include_router(memory.router)
@@ -22,6 +23,7 @@ __all__ = [
     "chat",
     "conversations",
     "email",
+    "events",
     "grants",
     "health",
     "lifecycle",
