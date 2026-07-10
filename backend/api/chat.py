@@ -246,12 +246,10 @@ async def post_message(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_db_factory),
+    llm_client: LLMClient = Depends(get_llm_client),
 ) -> StreamingResponse:
     user_id, session_id = get_identity(request)
     settings = get_settings()
-    llm_client: LLMClient | None = None
-    if settings.CHAT_USE_ORCHESTRATOR:
-        llm_client = get_llm_client()
 
     convo = await _resolve_conversation(db, user_id, session_id, body.conversation_id)
 
