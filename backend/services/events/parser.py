@@ -4,20 +4,10 @@ import hashlib
 import html
 import json
 import re
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
-import sqlalchemy as sa
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from backend.core.logging import get_logger
-from backend.db.models.event import Event
-from backend.services.events.adapters.registry import get_adapter_for_source_url
-
-logger = get_logger(__name__)
 
 _JSONLD_SCRIPT_RE = re.compile(
     r"<script[^>]*type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
@@ -155,7 +145,9 @@ def _iter_event_nodes(node: Any) -> list[dict[str, Any]]:
     return out
 
 
-def _parse_location(location_raw: Any) -> tuple[bool, str | None, str | None, str | None, str | None]:
+def _parse_location(
+    location_raw: Any,
+) -> tuple[bool, str | None, str | None, str | None, str | None]:
     if location_raw is None:
         return False, None, None, None, None
     if isinstance(location_raw, list):
@@ -217,11 +209,21 @@ def _application_required(description: str) -> bool:
     d = description.lower()
     return any(
         phrase in d
-        for phrase in ("application required", "must apply", "apply to attend", "selection process")
+        for phrase in (
+            "application required",
+            "must apply",
+            "apply to attend",
+            "selection process",
+        )
     )
 
 
-def _build_discovered_event(event_node: dict[str, Any], source_url: str) -> DiscoveredEvent | None:
+def _build_discovered_event(
+    event_node: dict[str, Any],
+    source_url: str,
+    *,
+    source_name: str,
+) -> DiscoveredEvent | None:
     name = _normalized_text(event_node.get("name"))
     starts_at = _parse_datetime(event_node.get("startDate"))
     if not name or starts_at is None:
@@ -240,7 +242,9 @@ def _build_discovered_event(event_node: dict[str, Any], source_url: str) -> Disc
             if isinstance(item, dict):
                 host_name = _normalized_text(item.get("name")) or host_name
 
-    is_virtual, location_text, city, region, country = _parse_location(event_node.get("location"))
+    is_virtual, location_text, city, region, country = _parse_location(
+        event_node.get("location")
+    )
 
     context_text = " ".join(
         value
@@ -256,6 +260,7 @@ def _build_discovered_event(event_node: dict[str, Any], source_url: str) -> Disc
     status = "expired" if (ends_at or starts_at) < now else "active"
 
     return DiscoveredEvent(
+        source=source_name,
         source_id=_event_source_id(event_url, starts_at, name),
         name=name,
         description=description,
@@ -263,7 +268,9 @@ def _build_discovered_event(event_node: dict[str, Any], source_url: str) -> Disc
         host_name=host_name,
         starts_at=starts_at,
         ends_at=ends_at,
-        timezone=str(event_node.get("eventSchedule")) if event_node.get("eventSchedule") else None,
+        timezone=str(event_node.get("eventSchedule"))
+        if event_node.get("eventSchedule")
+        else None,
         is_virtual=is_virtual,
         location_text=location_text,
         city=city,
@@ -281,7 +288,12 @@ def _build_discovered_event(event_node: dict[str, Any], source_url: str) -> Disc
     )
 
 
-def _extract_jsonld_events(content: str, source_url: str) -> list[DiscoveredEvent]:
+def parse_jsonld_events(
+    content: str,
+    source_url: str,
+    *,
+    source_name: str = "web_jsonld",
+) -> list[DiscoveredEvent]:
     events: list[DiscoveredEvent] = []
     seen_ids: set[str] = set()
     for raw_block in _JSONLD_SCRIPT_RE.findall(content):
@@ -293,135 +305,13 @@ def _extract_jsonld_events(content: str, source_url: str) -> list[DiscoveredEven
         except json.JSONDecodeError:
             continue
         for node in _iter_event_nodes(decoded):
-            event = _build_discovered_event(node, source_url)
+            event = _build_discovered_event(
+                node,
+                source_url,
+                source_name=source_name,
+            )
             if event is None or event.source_id in seen_ids:
                 continue
             events.append(event)
             seen_ids.add(event.source_id)
     return events
-
-
-async def discover_events_from_web(settings: Any) -> list[DiscoveredEvent]:
-    urls = settings.EVENT_SOURCE_URLS_LIST
-    if not urls:
-        return []
-
-    discovered: dict[str, DiscoveredEvent] = {}
-    async with httpx.AsyncClient(
-        headers={"User-Agent": settings.INGEST_USER_AGENT},
-        timeout=settings.EVENTS_HTTP_TIMEOUT_SECONDS,
-    ) as client:
-        for source_url in urls:
-            adapter = get_adapter_for_source_url(source_url)
-            try:
-                events = await adapter.discover(client, settings, source_url)
-            except httpx.HTTPError:
-                logger.warning(
-                    "events_source_fetch_failed",
-                    source_url=source_url,
-                    adapter=adapter.source_name,
-                )
-                continue
-            except Exception:
-                logger.exception(
-                    "events_source_adapter_failed",
-                    source_url=source_url,
-                    adapter=adapter.source_name,
-                )
-                continue
-
-            logger.info(
-                "events_source_scanned",
-                source_url=source_url,
-                adapter=adapter.source_name,
-                discovered=len(events),
-            )
-            for event in events:
-                discovered[event.source_id] = event
-
-    return list(discovered.values())
-
-
-def _to_db_dict(record: DiscoveredEvent, fetched_at: datetime) -> dict[str, Any]:
-    return {
-        "source_id": record.source_id,
-        "source": record.source,
-        "source_payload": record.source_payload,
-        "source_fetched_at": fetched_at,
-        "name": record.name,
-        "description": record.description,
-        "url": record.url,
-        "host_name": record.host_name,
-        "starts_at": record.starts_at,
-        "ends_at": record.ends_at,
-        "timezone": record.timezone,
-        "is_virtual": record.is_virtual,
-        "location_text": record.location_text,
-        "city": record.city,
-        "region": record.region,
-        "country": record.country,
-        "industry_tags": record.industry_tags or None,
-        "stage_tags": record.stage_tags or None,
-        "benefit_tags": record.benefit_tags or None,
-        "attendee_types": record.attendee_types or None,
-        "cost_usd_cents": record.cost_usd_cents,
-        "application_required": record.application_required,
-        "host_quality_score": record.host_quality_score,
-        "status": record.status,
-    }
-
-
-async def upsert_discovered_events(
-    session: AsyncSession,
-    records: list[DiscoveredEvent],
-    fetched_at: datetime,
-) -> tuple[int, int]:
-    if not records:
-        return 0, 0
-
-    source_ids = [r.source_id for r in records]
-    result = await session.execute(
-        sa.select(Event.source_id).where(Event.source_id.in_(source_ids))
-    )
-    existing_ids = {row.source_id for row in result}
-
-    inserted = 0
-    updated = 0
-    now = datetime.now(UTC)
-
-    conn = await session.connection()
-    is_postgres = conn.dialect.name == "postgresql"
-    if is_postgres:
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-        for record in records:
-            data = _to_db_dict(record, fetched_at)
-            stmt = pg_insert(Event).values(id=uuid.uuid4(), created_at=now, updated_at=now, **data)
-            update_fields = {k: v for k, v in data.items() if k != "source_id"}
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["source_id"],
-                set_={**update_fields, "updated_at": now},
-            )
-            await session.execute(stmt)
-            if record.source_id in existing_ids:
-                updated += 1
-            else:
-                inserted += 1
-    else:
-        for record in records:
-            data = _to_db_dict(record, fetched_at)
-            if record.source_id in existing_ids:
-                update_fields = {k: v for k, v in data.items() if k != "source_id"}
-                await session.execute(
-                    sa.update(Event)
-                    .where(Event.source_id == record.source_id)
-                    .values(**update_fields, updated_at=now)
-                )
-                updated += 1
-            else:
-                session.add(Event(id=uuid.uuid4(), created_at=now, updated_at=now, **data))
-                inserted += 1
-
-    await session.commit()
-    return inserted, updated
-

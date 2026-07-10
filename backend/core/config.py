@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: SecretStr = Field(default=SecretStr(""))
     DEEPSEEK_BASE_URL: str = Field(default="https://api.deepseek.com")
     DEEPSEEK_MODEL: str = Field(default="deepseek-chat")
+    LLM_PRIMARY: str = Field(default="deepseek")
+    LLM_FALLBACKS: str = Field(default="")
+    GEMINI_API_KEY: SecretStr = Field(default=SecretStr(""))
+    GEMINI_MODEL: str = Field(default="gemini-2.0-flash")
+    NVIDIA_API_KEY: SecretStr = Field(default=SecretStr(""))
+    NVIDIA_MODEL: str = Field(default="meta/llama-3.1-70b-instruct")
     LLM_TIMEOUT_SECONDS: float = Field(default=30.0)
     LLM_MAX_RETRIES: int = Field(default=2)
     DEEPSEEK_INPUT_PRICE_PER_MTOK: float = Field(default=0.27)
@@ -247,6 +253,16 @@ class Settings(BaseSettings):
             url.strip()
             for url in self.EVENTS_SOURCE_URLS.split(",")
             if url.strip()
+        ]
+
+    @property
+    def llm_fallback_list(self) -> list[str]:
+        if not self.LLM_FALLBACKS.strip():
+            return []
+        return [
+            value.strip()
+            for value in self.LLM_FALLBACKS.split(",")
+            if value.strip()
         ]
 
     def database_connect_args(self) -> dict:
