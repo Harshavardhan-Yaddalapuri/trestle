@@ -3,11 +3,31 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
+from backend.core.config import Settings
+from backend.core.errors import ConflictError
 from backend.db.models.event import Event
 from backend.db.models.profile import Profile
 from backend.schemas.event import EventMatchRequest
 from backend.services.events.discovery import _extract_jsonld_events, upsert_discovered_events
 from backend.services.events.matching import evaluate_event, resolve_event_profile
+from backend.services.events.orchestration import run_events_discovery_sweep
+
+
+def _settings(**overrides) -> Settings:
+    base = Settings(
+        DATABASE_URL="sqlite+aiosqlite:///:memory:",
+        REDIS_URL="redis://localhost:6379/0",
+        EVENTS_ENABLED=True,
+        EVENTS_SOURCE_URLS="https://x.test/events",
+        EVENTS_HTTP_TIMEOUT_SECONDS=10.0,
+        EVENTS_DISCOVERY_INTERVAL_HOURS=12,
+        EVENTS_REDIS_LOCK_TTL_SECONDS=60,
+    )
+    for k, v in overrides.items():
+        object.__setattr__(base, k, v)
+    return base
 
 
 def test_extract_jsonld_events_parses_basic_fields():
@@ -131,3 +151,57 @@ def test_match_events_uses_profile_context():
     assert strong_result.score > weak_result.score
     assert "industry" in strong_result.matched_on
     assert "outcome" in strong_result.matched_on
+
+
+async def test_events_discovery_sweep_happy_path(session_factory, redis_client, monkeypatch):
+    discovered = _extract_jsonld_events(
+        """
+        <script type="application/ld+json">
+          {"@type":"Event","name":"Founder Mixer","startDate":"2026-09-01T10:00:00Z","url":"https://x.test/event/1"}
+        </script>
+        """,
+        "https://x.test/events",
+    )
+
+    async def _fake_discover(settings):
+        return discovered
+
+    async def _fake_upsert(session, records, fetched_at):
+        assert len(records) == len(discovered)
+        return len(records), 0
+
+    monkeypatch.setattr(
+        "backend.services.events.orchestration.discover_events_from_web",
+        _fake_discover,
+    )
+    monkeypatch.setattr(
+        "backend.services.events.orchestration.upsert_discovered_events",
+        _fake_upsert,
+    )
+
+    result = await run_events_discovery_sweep(
+        session_factory=session_factory,
+        redis=redis_client,
+        settings=_settings(),
+        triggered_by="schedule",
+    )
+    assert result is not None
+    assert result.discovered == 1
+    assert result.inserted == 1
+    assert result.updated == 0
+    assert result.sources_scanned == 1
+    assert await redis_client.get("events:discover:lock") is None
+
+
+async def test_events_discovery_sweep_manual_conflict(session_factory, redis_client):
+    settings = _settings()
+    await redis_client.set("events:discover:lock", "existing-run", nx=True, ex=60)
+
+    with pytest.raises(ConflictError) as exc_info:
+        await run_events_discovery_sweep(
+            session_factory=session_factory,
+            redis=redis_client,
+            settings=settings,
+            triggered_by="manual",
+        )
+    assert exc_info.value.code == "events_discovery_in_progress"

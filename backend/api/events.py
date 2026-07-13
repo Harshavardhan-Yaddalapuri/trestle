@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import Settings, get_settings
 from backend.db.models.event import Event
 from backend.db.models.profile import Profile
-from backend.db.session import get_db
+from backend.db.session import get_db, get_db_factory
 from backend.middleware.auth import owner_clause
+from backend.redis_client import get_redis
 from backend.schemas.event import (
     EventDiscoveryResponse,
     EventListResponse,
@@ -18,8 +19,8 @@ from backend.schemas.event import (
     EventMatchResponse,
     EventSummary,
 )
-from backend.services.events.discovery import discover_events_from_web, upsert_discovered_events
 from backend.services.events.matching import evaluate_event, is_event_active, resolve_event_profile
+from backend.services.events.orchestration import run_events_discovery_sweep
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -38,16 +39,24 @@ def _list_filter_string(col, value: str, is_postgres: bool) -> sa.ColumnElement:
 
 @router.post("/discover", response_model=EventDiscoveryResponse)
 async def discover_events(
-    db: AsyncSession = Depends(get_db),
+    request: Request,
+    redis = Depends(get_redis),
+    session_factory = Depends(get_db_factory),
     settings: Settings = Depends(get_settings),
 ) -> EventDiscoveryResponse:
-    discovered = await discover_events_from_web(settings)
-    inserted, updated = await upsert_discovered_events(db, discovered, datetime.now(UTC))
+    result = await run_events_discovery_sweep(
+        session_factory=session_factory,
+        redis=redis,
+        settings=settings,
+        triggered_by="manual",
+        triggered_session_id=getattr(request.state, "session_id", None),
+    )
+    assert result is not None
     return EventDiscoveryResponse(
-        discovered=len(discovered),
-        inserted=inserted,
-        updated=updated,
-        sources_scanned=len(settings.EVENT_SOURCE_URLS_LIST),
+        discovered=result.discovered,
+        inserted=result.inserted,
+        updated=result.updated,
+        sources_scanned=result.sources_scanned,
     )
 
 

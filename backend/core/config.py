@@ -182,6 +182,7 @@ class Settings(BaseSettings):
     EVENTS_ENABLED: bool = Field(default=False)
     EVENTS_HTTP_TIMEOUT_SECONDS: float = Field(default=20.0)
     EVENTS_DISCOVERY_INTERVAL_HOURS: int = Field(default=12)
+    EVENTS_REDIS_LOCK_TTL_SECONDS: int = Field(default=1800)
     EVENTS_SOURCE_URLS: str = Field(default="")
 
     @model_validator(mode="after")
