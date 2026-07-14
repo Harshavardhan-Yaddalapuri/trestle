@@ -1,6 +1,6 @@
 """Add user_id to grant_tracks, grant_dismissals, and agent_memories
 
-Revision ID: 0010_add_user_id_to_tracks_dismissals_memories
+Revision ID: 0010_tracks_user_id
 Revises: 0009_add_user_id
 Create Date: 2026-06-03
 
@@ -19,7 +19,7 @@ def column_exists(table_name: str, column_name: str) -> bool:
     columns = [c["name"] for c in inspector.get_columns(table_name)]
     return column_name in columns
 
-revision: str = "0010_add_user_id_to_tracks_dismissals_memories"
+revision: str = "0010_tracks_user_id"
 down_revision: Union[str, None] = "0009_add_user_id"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
