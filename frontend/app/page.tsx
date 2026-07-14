@@ -14,7 +14,6 @@ export default function HomePage() {
       <main className="pt-24 pb-12">
         <Hero />
         <Features />
-        <Trust />
       </main>
       <MobileNav />
       <Footer />
