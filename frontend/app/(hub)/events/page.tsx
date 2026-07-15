@@ -1,13 +1,11 @@
 import Link from "next/link";
 import FilterDropdown from "@/components/filter-dropdown";
-import { fetchEvents } from "@/lib/api/events";
+import { fetchEvents, fetchMatchedEvents } from "@/lib/api/events";
 import type { ApiEventSummary } from "@/lib/api/events-types";
 import {
   buildEventsListHref,
-  EVENT_INDUSTRY_LABELS,
-  EVENT_INDUSTRY_OPTIONS,
-  EVENT_STAGE_LABELS,
-  EVENT_STAGE_OPTIONS,
+  EVENT_DEMO_PROFILE_LABELS,
+  EVENT_DEMO_PROFILE_OPTIONS,
   parseEventsListQuery,
 } from "@/lib/events-list-query";
 
@@ -17,9 +15,7 @@ export const metadata = {
 
 type PageProps = {
   searchParams: Promise<{
-    stage?: string;
-    industry?: string;
-    include_expired?: string;
+    profile?: string;
   }>;
 };
 
@@ -44,86 +40,59 @@ function getLocationLabel(event: ApiEventSummary): string {
   return event.location_text ?? event.city ?? event.region ?? event.country ?? "Virtual";
 }
 
+const DEMO_PROFILE_MATCH_PARAMS = {
+  ai_seed_founder: {
+    stage: "seed",
+    industry: ["ai"],
+    location: "new york",
+    goals: ["fundraising", "networking"],
+  },
+  biotech_founder: {
+    stage: "pre_seed",
+    industry: ["biotech"],
+    location: "cambridge",
+    goals: ["partnerships", "lab access"],
+  },
+  climate_operator: {
+    stage: "series_a",
+    industry: ["climate"],
+    location: "san francisco",
+    goals: ["partnerships", "fundraising"],
+  },
+} as const;
+
 export default async function EventsPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const query = parseEventsListQuery(sp);
+  const selectedProfile = query.profile ?? "none";
 
   let events: ApiEventSummary[] = [];
   let loadError: string | null = null;
 
   try {
-    const response = await fetchEvents({
-      stage: query.stage,
-      industry: query.industry,
-      includeExpired: query.includeExpired,
-      limit: 50,
-    });
-    events = response.items;
+    if (selectedProfile === "none") {
+      const response = await fetchEvents({ limit: 50 });
+      events = response.items;
+    } else {
+      const response = await fetchMatchedEvents({
+        ...DEMO_PROFILE_MATCH_PARAMS[selectedProfile],
+        limit: 50,
+        minScore: 0.2,
+      });
+      events = response.results.map((row) => row.event);
+    }
   } catch (err) {
     loadError =
       err instanceof Error ? err.message : "Could not load events from the API.";
   }
 
-  const stageOptions = [
-    {
-      value: "all",
-      label: "All stages",
-      href: buildEventsListHref({
-        industry: query.industry,
-        includeExpired: query.includeExpired,
-      }),
-    },
-    ...EVENT_STAGE_OPTIONS.map((stage) => ({
-      value: stage,
-      label: EVENT_STAGE_LABELS[stage],
-      href: buildEventsListHref({
-        stage,
-        industry: query.industry,
-        includeExpired: query.includeExpired,
-      }),
-    })),
-  ];
-
-  const industryOptions = [
-    {
-      value: "all",
-      label: "All industries",
-      href: buildEventsListHref({
-        stage: query.stage,
-        includeExpired: query.includeExpired,
-      }),
-    },
-    ...EVENT_INDUSTRY_OPTIONS.map((industry) => ({
-      value: industry,
-      label: EVENT_INDUSTRY_LABELS[industry],
-      href: buildEventsListHref({
-        stage: query.stage,
-        industry,
-        includeExpired: query.includeExpired,
-      }),
-    })),
-  ];
-
-  const recencyOptions = [
-    {
-      value: "upcoming",
-      label: "Upcoming only",
-      href: buildEventsListHref({
-        stage: query.stage,
-        industry: query.industry,
-        includeExpired: false,
-      }),
-    },
-    {
-      value: "all_time",
-      label: "Include expired",
-      href: buildEventsListHref({
-        stage: query.stage,
-        industry: query.industry,
-        includeExpired: true,
-      }),
-    },
-  ];
+  const profileOptions = EVENT_DEMO_PROFILE_OPTIONS.map((profile) => ({
+    value: profile,
+    label: EVENT_DEMO_PROFILE_LABELS[profile],
+    href: buildEventsListHref({
+      profile,
+    }),
+  }));
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -135,8 +104,13 @@ export default async function EventsPage({ searchParams }: PageProps) {
           Events
         </h1>
         <p className="text-on-surface-variant mt-1 text-sm md:text-base">
-          Founder events discovered by the backend and filtered by your interests.
+          Demo-friendly events from the local database. No login required.
         </p>
+        {selectedProfile !== "none" ? (
+          <p className="text-on-surface-variant mt-1 text-xs md:text-sm">
+            Showing scored matches for: {EVENT_DEMO_PROFILE_LABELS[selectedProfile]}.
+          </p>
+        ) : null}
       </div>
 
       {loadError ? (
@@ -150,19 +124,9 @@ export default async function EventsPage({ searchParams }: PageProps) {
 
       <div className="flex flex-wrap items-center gap-3">
         <FilterDropdown
-          label="Stage"
-          options={stageOptions}
-          value={query.stage ?? "all"}
-        />
-        <FilterDropdown
-          label="Industry"
-          options={industryOptions}
-          value={query.industry ?? "all"}
-        />
-        <FilterDropdown
-          label="Window"
-          options={recencyOptions}
-          value={query.includeExpired ? "all_time" : "upcoming"}
+          label="Founder profile"
+          options={profileOptions}
+          value={selectedProfile}
         />
       </div>
 
@@ -180,7 +144,8 @@ export default async function EventsPage({ searchParams }: PageProps) {
             {events.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-on-surface-variant">
-                  No events match these filters yet.
+                  No events found for this founder profile yet. Try switching to
+                  "None (all events)".
                 </td>
               </tr>
             ) : (
@@ -208,10 +173,8 @@ export default async function EventsPage({ searchParams }: PageProps) {
                   <td className="px-4 py-3 text-on-surface-variant hidden lg:table-cell">
                     {getLocationLabel(event)}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full border border-outline-variant px-2 py-1 text-xs text-on-surface">
-                      {event.is_virtual ? "Virtual" : "In person"}
-                    </span>
+                  <td className="px-4 py-3 text-on-surface-variant">
+                    {event.is_virtual ? "Virtual" : "In person"}
                   </td>
                 </tr>
               ))

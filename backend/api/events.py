@@ -30,7 +30,10 @@ _MAX_LIMIT = 100
 
 def _list_filter_string(col, value: str, is_postgres: bool) -> sa.ColumnElement:
     if is_postgres:
-        return col.overlap([value, "any"])
+        return sa.or_(
+            sa.literal(value) == sa.any_(col),
+            sa.literal("any") == sa.any_(col),
+        )
     return sa.or_(
         sa.cast(col, sa.Text).like(f'%"{value}"%'),
         sa.cast(col, sa.Text).like('%"any"%'),

@@ -27,3 +27,25 @@ export interface ApiEventSummary {
 export interface ApiEventListResponse {
   items: ApiEventSummary[];
 }
+
+export interface ApiEventMatchProfile {
+  company_stage: string | null;
+  industry: string[] | null;
+  location: string | null;
+  goals: string[];
+}
+
+export interface ApiEventMatchResult {
+  event: ApiEventSummary;
+  score: number;
+  matched_on: string[];
+  missing_or_mismatched: string[];
+  explanation: string;
+}
+
+export interface ApiEventMatchResponse {
+  match_profile: ApiEventMatchProfile;
+  results: ApiEventMatchResult[];
+  total_evaluated: number;
+  total_returned: number;
+}

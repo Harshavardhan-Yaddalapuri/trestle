@@ -18,35 +18,39 @@ export const EVENT_INDUSTRY_OPTIONS = [
 ] as const;
 export type EventIndustryOption = (typeof EVENT_INDUSTRY_OPTIONS)[number];
 
+export const EVENT_DEMO_PROFILE_OPTIONS = [
+  "none",
+  "ai_seed_founder",
+  "biotech_founder",
+  "climate_operator",
+] as const;
+export type EventDemoProfileOption = (typeof EVENT_DEMO_PROFILE_OPTIONS)[number];
+
+export const EVENT_DEMO_PROFILE_LABELS: Record<EventDemoProfileOption, string> = {
+  none: "None (all events)",
+  ai_seed_founder: "AI founder (seed)",
+  biotech_founder: "Biotech founder (pre-seed)",
+  climate_operator: "Climate founder (Series A+)",
+};
+
 export interface EventsListQuery {
-  stage?: EventStageOption;
-  industry?: EventIndustryOption;
-  includeExpired?: boolean;
+  profile?: EventDemoProfileOption;
 }
 
 export function parseEventsListQuery(searchParams: {
-  stage?: string;
-  industry?: string;
-  include_expired?: string;
+  profile?: string;
 }): EventsListQuery {
-  const stage = EVENT_STAGE_OPTIONS.includes(searchParams.stage as EventStageOption)
-    ? (searchParams.stage as EventStageOption)
-    : undefined;
-  const industry = EVENT_INDUSTRY_OPTIONS.includes(
-    searchParams.industry as EventIndustryOption,
+  const profile = EVENT_DEMO_PROFILE_OPTIONS.includes(
+    searchParams.profile as EventDemoProfileOption,
   )
-    ? (searchParams.industry as EventIndustryOption)
+    ? (searchParams.profile as EventDemoProfileOption)
     : undefined;
-  const includeExpired =
-    searchParams.include_expired === "1" || searchParams.include_expired === "true";
-  return { stage, industry, includeExpired };
+  return { profile };
 }
 
 export function buildEventsListHref(query: EventsListQuery): string {
   const params = new URLSearchParams();
-  if (query.stage) params.set("stage", query.stage);
-  if (query.industry) params.set("industry", query.industry);
-  if (query.includeExpired) params.set("include_expired", "1");
+  if (query.profile && query.profile !== "none") params.set("profile", query.profile);
   const qs = params.toString();
   return qs ? `/events?${qs}` : "/events";
 }

@@ -81,3 +81,29 @@ class EventDiscoveryResponse(BaseModel):
     inserted: int
     updated: int
     sources_scanned: int
+
+
+class EventSeed(BaseModel):
+    source_id: str
+    source: str = "seed_demo"
+    source_payload: dict = Field(default_factory=dict)
+    name: str
+    description: str = ""
+    url: str
+    host_name: str | None = None
+    starts_at: datetime
+    ends_at: datetime | None = None
+    timezone: str | None = None
+    is_virtual: bool = False
+    location_text: str | None = None
+    city: str | None = None
+    region: str | None = None
+    country: str | None = None
+    industry_tags: list[str] | None = None
+    stage_tags: list[str] | None = None
+    benefit_tags: list[str] | None = None
+    attendee_types: list[str] | None = None
+    cost_usd_cents: int | None = None
+    application_required: bool = False
+    host_quality_score: float = 0.5
+    status: str = "active"
