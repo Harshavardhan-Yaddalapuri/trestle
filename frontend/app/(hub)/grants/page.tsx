@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { listTrackedGrants } from "@/lib/data/tracked-grants";
 import { sortTrackedGrants } from "@/lib/data/grants-sort";
 import { isMockDataSource } from "@/lib/config/data-source";
@@ -11,7 +10,7 @@ import {
   parseGrantsListQuery,
 } from "@/lib/grants-list-query";
 import GrantsTable from "./_components/GrantsTable";
-import { cn } from "@/lib/utils";
+import FilterDropdown from "@/components/filter-dropdown";
 
 export const metadata = {
   title: "Grants — Trestle",
@@ -49,6 +48,24 @@ export default async function GrantsPage({ searchParams }: PageProps) {
   }
 
   const usingApi = !isMockDataSource();
+  const statusOptions = [
+    {
+      value: "in_progress",
+      label: "In progress",
+      href: buildGrantsListHref({ sort: query.sort, dir: query.dir }),
+    },
+    {
+      value: "all",
+      label: "All",
+      href: buildGrantsListHref({ sort: query.sort, dir: query.dir, all: true }),
+    },
+    ...GRANT_LIFECYCLE_STATUSES.map((s) => ({
+      value: s,
+      label: GRANT_LIFECYCLE_LABELS[s],
+      href: buildGrantsListHref({ sort: query.sort, dir: query.dir, status: s }),
+    })),
+  ];
+  const selectedStatus = status ?? (showAll ? "all" : "in_progress");
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -75,55 +92,15 @@ export default async function GrantsPage({ searchParams }: PageProps) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <FilterChip
-          href={buildGrantsListHref({ sort: query.sort, dir: query.dir, all: true })}
-          active={showAll && !status}
-        >
-          All
-        </FilterChip>
-        <FilterChip
-          href={buildGrantsListHref({ sort: query.sort, dir: query.dir })}
-          active={!showAll && !status}
-        >
-          In progress
-        </FilterChip>
-        {GRANT_LIFECYCLE_STATUSES.map((s) => (
-          <FilterChip
-            key={s}
-            href={buildGrantsListHref({ sort: query.sort, dir: query.dir, status: s })}
-            active={status === s}
-          >
-            {GRANT_LIFECYCLE_LABELS[s]}
-          </FilterChip>
-        ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <FilterDropdown
+          label="Status"
+          options={statusOptions}
+          value={selectedStatus}
+        />
       </div>
 
       <GrantsTable grants={grants} query={query} usingApi={usingApi} />
     </div>
-  );
-}
-
-function FilterChip({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-full px-4 py-2 text-sm font-medium border transition-colors",
-        active
-          ? "bg-secondary-container text-on-secondary-container border-transparent"
-          : "border-outline-variant text-on-surface-variant hover:bg-surface-variant/60",
-      )}
-    >
-      {children}
-    </Link>
   );
 }

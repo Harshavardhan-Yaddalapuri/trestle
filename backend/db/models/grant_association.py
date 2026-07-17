@@ -87,7 +87,6 @@ class GrantTrack(Base):
     )
 
     __table_args__ = (
-        Index("ix_grant_tracks_session_id", "session_id"),
         Index("ix_grant_tracks_session_deleted", "session_id", "deleted_at"),
         Index(
             "ix_grant_tracks_session_lifecycle",
@@ -122,7 +121,6 @@ class GrantDismissal(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        Index("ix_grant_dismissals_session_id", "session_id"),
         Index("ix_grant_dismissals_session_grant", "session_id", "grant_id"),
         CheckConstraint(
             "reason IS NULL OR reason IN ("

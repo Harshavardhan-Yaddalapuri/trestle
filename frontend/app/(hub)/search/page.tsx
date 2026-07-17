@@ -102,7 +102,8 @@ export default function SearchPage() {
             if (
               data.name === "grant_search" ||
               data.name === "match_grants" ||
-              data.name === "recommend_grants"
+              data.name === "recommend_grants" ||
+              data.name === "grants.match.run"
             ) {
               const result = data.result as
                 | { grants?: unknown[] }

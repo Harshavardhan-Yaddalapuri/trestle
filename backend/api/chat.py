@@ -78,7 +78,7 @@ async def _run_producer(
     user_content: str,
     user_id: str | None,
     session_id: str,
-    llm_client: LLMClient,
+    llm_client: LLMClient | None,
     settings: Settings,
 ) -> None:
     """Background producer: emits tokens → persists assistant message →
@@ -95,6 +95,8 @@ async def _run_producer(
 
     try:
         if settings.CHAT_USE_ORCHESTRATOR:
+            if llm_client is None:
+                raise RuntimeError("llm_client_not_available")
             from backend.services.orchestrator import run_turn
             from backend.services.orchestrator.events import (
                 FinishEvent,

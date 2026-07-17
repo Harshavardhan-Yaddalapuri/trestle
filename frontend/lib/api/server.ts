@@ -3,7 +3,11 @@ import "server-only";
 import { ApiError } from "@/lib/api-error";
 import { buildApiCookieHeader } from "@/lib/session-server";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/** Browser uses NEXT_PUBLIC_API_URL; server components in Docker use INTERNAL_API_URL. */
+const API_BASE =
+  process.env.INTERNAL_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000";
 
 type ServerRequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;

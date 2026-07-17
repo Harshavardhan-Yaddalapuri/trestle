@@ -20,6 +20,31 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
+    if "users" in tables:
+        existing_cols = {col["name"] for col in inspector.get_columns("users")}
+        if "sub" not in existing_cols:
+            op.add_column("users", sa.Column("sub", sa.String(length=255), nullable=True))
+        if "alert_prefs" not in existing_cols:
+            op.add_column(
+                "users",
+                sa.Column(
+                    "alert_prefs",
+                    sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
+                    nullable=False,
+                    server_default=sa.text("'{}'"),
+                ),
+            )
+        existing_indexes = {idx["name"] for idx in inspector.get_indexes("users")}
+        if "ix_users_sub" not in existing_indexes:
+            op.create_index("ix_users_sub", "users", ["sub"], unique=True)
+        existing_uniques = {c["name"] for c in inspector.get_unique_constraints("users")}
+        if "uq_users_sub" not in existing_uniques:
+            op.create_unique_constraint("uq_users_sub", "users", ["sub"])
+        return
+
     op.create_table(
         "users",
         sa.Column("id", sa.Uuid(), primary_key=True),

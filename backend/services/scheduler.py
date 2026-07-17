@@ -1,9 +1,10 @@
 """In-process scheduler for background jobs.
 
-Three independent loops:
+Four independent loops:
 - url_verify_scheduler: weekly URL verification sweep
 - lifecycle_auto_scheduler: daily automated lifecycle transitions
 - ingest_scheduler: periodic grant ingestion from external sources
+- events_scheduler: periodic startup-events discovery from source URLs
 
 Each loop has its own Redis lock and independent jitter so they don't
 wake on exactly the same second.
@@ -17,6 +18,7 @@ from backend.core.config import get_settings
 from backend.core.logging import get_logger
 from backend.db.session import get_session_factory
 from backend.redis_client import get_redis_client
+from backend.services.events.orchestration import run_events_discovery_sweep
 from backend.services.ingest.orchestration import run_ingest_sweep
 from backend.services.ingest.registry import get_enabled_sources
 from backend.services.lifecycle.auto_transitions import run_lifecycle_auto_sweep
@@ -89,3 +91,27 @@ async def ingest_scheduler() -> None:
                     )
 
         await asyncio.sleep(settings.INGEST_INTERVAL_HOURS * 3600)
+
+
+async def events_scheduler() -> None:
+    settings = get_settings()
+    jitter = random.uniform(0, 60)
+    logger.info("events_scheduler_started", jitter_seconds=round(jitter, 1))
+
+    await asyncio.sleep(jitter)
+
+    while True:
+        if settings.EVENTS_ENABLED:
+            try:
+                factory = get_session_factory()
+                redis = get_redis_client()
+                await run_events_discovery_sweep(
+                    factory,
+                    redis,
+                    settings,
+                    triggered_by="schedule",
+                )
+            except Exception:
+                logger.exception("events_scheduler_run_failed")
+
+        await asyncio.sleep(settings.EVENTS_DISCOVERY_INTERVAL_HOURS * 3600)

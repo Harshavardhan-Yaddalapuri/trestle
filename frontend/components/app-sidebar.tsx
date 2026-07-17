@@ -11,6 +11,7 @@ export type MainNavItem = { icon: string; label: string; href: string };
 export const MAIN_NAV_ITEMS: MainNavItem[] = [
   { icon: "dashboard", label: "Dashboard", href: "/dashboard" },
   { icon: "smart_toy", label: "Agentic Search", href: "/search" },
+  { icon: "event", label: "Events", href: "/events" },
   { icon: "hub", label: "Connections", href: "/connections" },
   { icon: "bookmarks", label: "Resources", href: "/resources" },
   { icon: "assignment", label: "Grants", href: "/grants" },

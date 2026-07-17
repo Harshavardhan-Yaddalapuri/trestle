@@ -7,6 +7,7 @@ services:
     env_file:
       - .env
     environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-trestle}:${POSTGRES_PASSWORD:-trestle}@postgres:5432/${POSTGRES_DB:-trestle}}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
@@ -22,17 +23,24 @@ services:
     networks:
       - trestle-net
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   frontend:
     build: ./frontend
     container_name: trestle-frontend
     ports:
       - "3000:3000"
+    env_file:
+      - frontend/.env.local
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_BYPASS_AUTH=${NEXT_PUBLIC_BYPASS_AUTH:-false}
+      - INTERNAL_API_URL=${INTERNAL_API_URL:-http://backend:8000}
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -49,6 +57,28 @@ services:
     networks:
       - trestle-net
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: trestle-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-trestle}
+      - POSTGRES_USER=${POSTGRES_USER:-trestle}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-trestle}
+    ports:
+      - "5432:5432"
+    volumes:
+      - trestle-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trestle} -d ${POSTGRES_DB:-trestle}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - trestle-net
+
 networks:
   trestle-net:
     driver: bridge
+
+volumes:
+  trestle-postgres-data:

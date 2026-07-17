@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str | None = Field(default=None)
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
 
-    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    CORS_ORIGINS: List[str] | str = Field(default_factory=lambda: ["http://localhost:3000"])
 
     SESSION_COOKIE_NAME: str = Field(default="trestle_anon_session")
     SESSION_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 30)
@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: SecretStr = Field(default=SecretStr(""))
     DEEPSEEK_BASE_URL: str = Field(default="https://api.deepseek.com")
     DEEPSEEK_MODEL: str = Field(default="deepseek-chat")
+    LLM_PRIMARY: str = Field(default="deepseek")
+    LLM_FALLBACKS: str = Field(default="")
+    GEMINI_API_KEY: SecretStr = Field(default=SecretStr(""))
+    GEMINI_MODEL: str = Field(default="gemini-2.0-flash")
+    NVIDIA_API_KEY: SecretStr = Field(default=SecretStr(""))
+    NVIDIA_MODEL: str = Field(default="meta/llama-3.1-70b-instruct")
     LLM_TIMEOUT_SECONDS: float = Field(default=30.0)
     LLM_MAX_RETRIES: int = Field(default=2)
     DEEPSEEK_INPUT_PRICE_PER_MTOK: float = Field(default=0.27)
@@ -172,6 +178,12 @@ class Settings(BaseSettings):
     SBIRGOV_ENABLED: bool = Field(default=True)
     SBIRGOV_PAGE_SIZE: int = Field(default=100)
     SBIRGOV_MAX_PAGES: int = Field(default=30)
+
+    EVENTS_ENABLED: bool = Field(default=False)
+    EVENTS_HTTP_TIMEOUT_SECONDS: float = Field(default=20.0)
+    EVENTS_DISCOVERY_INTERVAL_HOURS: int = Field(default=12)
+    EVENTS_REDIS_LOCK_TTL_SECONDS: int = Field(default=1800)
+    EVENTS_SOURCE_URLS: str = Field(default="")
 
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":
@@ -233,6 +245,26 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.ENVIRONMENT.lower() in {"dev", "development", "local"}
+
+    @property
+    def EVENT_SOURCE_URLS_LIST(self) -> list[str]:
+        if not self.EVENTS_SOURCE_URLS.strip():
+            return []
+        return [
+            url.strip()
+            for url in self.EVENTS_SOURCE_URLS.split(",")
+            if url.strip()
+        ]
+
+    @property
+    def llm_fallback_list(self) -> list[str]:
+        if not self.LLM_FALLBACKS.strip():
+            return []
+        return [
+            value.strip()
+            for value in self.LLM_FALLBACKS.split(",")
+            if value.strip()
+        ]
 
     def database_connect_args(self) -> dict:
         """Driver kwargs for create_async_engine (SSL required for Supabase)."""

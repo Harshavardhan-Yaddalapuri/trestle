@@ -18,6 +18,7 @@ from backend.middleware.request_id import RequestIdMiddleware
 from backend.middleware.session import SessionMiddleware
 from backend.redis_client import close_redis, init_redis
 from backend.services.scheduler import (
+    events_scheduler,
     ingest_scheduler,
     lifecycle_auto_scheduler,
     url_verify_scheduler,
@@ -82,6 +83,10 @@ async def lifespan(app: FastAPI):
     if settings.INGEST_ENABLED:
         ingest_task = asyncio.create_task(ingest_scheduler())
 
+    events_task: asyncio.Task | None = None
+    if settings.EVENTS_ENABLED:
+        events_task = asyncio.create_task(events_scheduler())
+
     logger.info("startup_complete")
     try:
         yield
@@ -109,6 +114,14 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
             logger.info("ingest_scheduler_stopped")
+
+        if events_task is not None:
+            events_task.cancel()
+            try:
+                await events_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("events_scheduler_stopped")
 
 
         await close_redis()
