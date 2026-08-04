@@ -13,6 +13,7 @@ from __future__ import annotations
 import html
 import re
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Any
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -77,19 +78,15 @@ def _phrase_pattern(phrase: str) -> re.Pattern[str]:
     return re.compile(rf"\b{escaped}{suffix}", re.IGNORECASE)
 
 
-def _compile(mapping: dict[str, tuple[str, ...]]) -> dict[str, tuple[re.Pattern[str], ...]]:
-    return {
-        tag: tuple(_phrase_pattern(phrase) for phrase in phrases)
-        for tag, phrases in mapping.items()
-    }
-
-
-_COMPILED_KEYWORDS: dict[int, dict[str, tuple[re.Pattern[str], ...]]] = {
-    id(INDUSTRY_KEYWORDS): _compile(INDUSTRY_KEYWORDS),
-    id(STAGE_KEYWORDS): _compile(STAGE_KEYWORDS),
-    id(BENEFIT_KEYWORDS): _compile(BENEFIT_KEYWORDS),
-    id(ATTENDEE_KEYWORDS): _compile(ATTENDEE_KEYWORDS),
-}
+@lru_cache(maxsize=16)
+def _compiled_patterns(
+    keywords: tuple[tuple[str, tuple[str, ...]], ...],
+) -> tuple[tuple[str, tuple[re.Pattern[str], ...]], ...]:
+    """Compile a keyword map once per distinct vocabulary."""
+    return tuple(
+        (tag, tuple(_phrase_pattern(phrase) for phrase in phrases))
+        for tag, phrases in keywords
+    )
 
 
 def normalize_text(value: Any) -> str:
@@ -105,10 +102,9 @@ def extract_tags(text: str, mapping: dict[str, tuple[str, ...]]) -> list[str]:
     """Return every tag in `mapping` whose phrases appear in `text`."""
     if not text:
         return []
-    compiled = _COMPILED_KEYWORDS.get(id(mapping)) or _compile(mapping)
     return [
         tag
-        for tag, patterns in compiled.items()
+        for tag, patterns in _compiled_patterns(tuple(mapping.items()))
         if any(pattern.search(text) for pattern in patterns)
     ]
 

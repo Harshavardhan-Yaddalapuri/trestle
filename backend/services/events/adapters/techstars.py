@@ -46,14 +46,16 @@ _EVENTS_FALLBACK_PATH = "/events/search"
 _MAX_PAGE_SIZE = 250
 
 # Techstars event_type values carry intent that free-text matching would miss.
+# Types whose benefit is not one of our tags (workshops, webinars) are omitted
+# rather than mapped to a loose approximation.
 _EVENT_TYPE_BENEFITS: dict[str, tuple[str, ...]] = {
+    # 54 hours of team building that ends in a pitch to judges.
     "startup weekend": ("networking", "investor_access"),
     "startup week": ("networking",),
     "networking/meetup": ("networking",),
     "network": ("networking",),
     "conference": ("networking",),
     "vertical network partner event": ("partnerships", "networking"),
-    "founder workshops & panels": ("customer_discovery",),
 }
 
 _ONLINE_LOCATION_TYPES = frozenset({"online", "virtual", "hybrid"})
