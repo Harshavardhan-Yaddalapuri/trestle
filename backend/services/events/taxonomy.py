@@ -123,8 +123,18 @@ def host_quality_score(host_name: str | None) -> float:
     return KNOWN_HOST_SCORE
 
 
-def parse_iso_datetime(value: Any) -> datetime | None:
-    """Parse an ISO-8601 date or datetime into an aware UTC datetime."""
+def _is_date_only(raw: str) -> bool:
+    return "T" not in raw and ":" not in raw
+
+
+def parse_iso_datetime(value: Any, *, date_only_as_end_of_day: bool = False) -> datetime | None:
+    """Parse an ISO-8601 date or datetime into an aware UTC datetime.
+
+    Listing pages often publish all-day events as a bare date. Parsing such a
+    value as an end boundary would put it at midnight and make an event
+    happening today look already finished, so callers handling an end date can
+    ask for the last instant of that day instead.
+    """
     if not value:
         return None
     raw = str(value).strip()
@@ -134,6 +144,8 @@ def parse_iso_datetime(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if date_only_as_end_of_day and _is_date_only(raw):
+        parsed = parsed.replace(hour=23, minute=59, second=59)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)

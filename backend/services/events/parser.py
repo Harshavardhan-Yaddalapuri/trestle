@@ -203,7 +203,7 @@ def _build_discovered_event(
     if not name or starts_at is None:
         return None
 
-    ends_at = parse_iso_datetime(event_node.get("endDate"))
+    ends_at = parse_iso_datetime(event_node.get("endDate"), date_only_as_end_of_day=True)
     event_url = normalize_text(event_node.get("url")) or source_url
     description = normalize_text(event_node.get("description"))
     host_name = _parse_host_name(event_node.get("organizer"))

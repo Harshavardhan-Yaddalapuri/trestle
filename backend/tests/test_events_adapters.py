@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import httpx
 import respx
 
@@ -119,6 +121,25 @@ async def test_eventbrite_adapter_paginates_listing_pages():
     # Stops after the repeated page rather than exhausting max_pages blindly.
     assert route.call_count == 3
     assert [call.request.url.params.get("page") for call in route.calls] == [None, "2", "3"]
+
+
+def test_all_day_event_today_is_still_active():
+    """A date-only endDate must not expire an event on the morning it happens."""
+    today = datetime.now(UTC).date().isoformat()
+    events = parse_jsonld_events(
+        f"""
+        <script type="application/ld+json">
+          {{"@type":"Event","name":"All Day Founder Workshop",
+            "startDate":"{today}","endDate":"{today}",
+            "url":"https://www.eventbrite.com/e/all-day"}}
+        </script>
+        """,
+        EVENTBRITE_LISTING_URL,
+        source_name="eventbrite",
+    )
+
+    assert len(events) == 1
+    assert events[0].status == "active"
 
 
 async def test_eventbrite_adapter_does_not_paginate_single_event_page():
