@@ -1,62 +1,45 @@
+"""schema.org JSON-LD event parser.
+
+Turns the `application/ld+json` blocks embedded in an event listing page into
+`DiscoveredEvent` records. Listing pages rarely put Event nodes at the top
+level — Eventbrite, for example, wraps them in `ItemList` → `ListItem` →
+`item` — so the node walker descends through arbitrary containers.
+"""
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import re
+from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from backend.services.events.taxonomy import (
+    ATTENDEE_KEYWORDS,
+    BENEFIT_KEYWORDS,
+    INDUSTRY_KEYWORDS,
+    STAGE_KEYWORDS,
+    extract_tags,
+    host_quality_score,
+    normalize_text,
+    parse_iso_datetime,
+)
+
 _JSONLD_SCRIPT_RE = re.compile(
     r"<script[^>]*type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
     re.IGNORECASE | re.DOTALL,
 )
-_TAG_RE = re.compile(r"<[^>]+>")
 
-_INDUSTRY_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "ai": ("ai", "artificial intelligence", "machine learning", "llm"),
-    "biotech": ("biotech", "life sciences", "pharma", "wet lab"),
-    "climate": ("climate", "cleantech", "decarbonization", "energy transition"),
-    "hardware": ("hardware", "manufacturing", "iot", "robotics"),
-    "fintech": ("fintech", "payments", "banking", "financial"),
-    "healthcare": ("healthcare", "digital health", "medtech"),
-}
+# schema.org marks online events with an eventAttendanceMode enum value.
+_ONLINE_ATTENDANCE_MODES = ("onlineeventattendancemode", "mixedeventattendancemode")
 
-_STAGE_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "idea": ("idea stage", "first-time founder"),
-    "pre_seed": ("pre-seed", "pre seed"),
-    "seed": ("seed stage", "seed founders", "seed startup"),
-    "series_a": ("series a", "growth stage"),
-}
-
-_BENEFIT_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "networking": ("networking", "mixer", "community"),
-    "investor_access": ("investor", "vc", "fundraising", "demo day", "pitch"),
-    "hiring": ("hiring", "talent", "recruiting", "job fair"),
-    "customer_discovery": ("customer", "go-to-market", "gtm", "sales"),
-    "partnerships": ("partnership", "corporate", "business development"),
-    "media_visibility": ("media", "press", "pr"),
-    "lab_access": ("lab", "wet lab", "research park"),
-}
-
-_ATTENDEE_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "founders": ("founder", "startup", "entrepreneur"),
-    "investors": ("investor", "vc", "angel"),
-    "students": ("student", "university"),
-    "developers": ("developer", "engineer"),
-}
-
-_HIGH_QUALITY_HOST_PATTERNS: tuple[str, ...] = (
-    "techstars",
-    "ycombinator",
-    "startup grind",
-    "mit",
-    "stanford",
-    "berkeley",
-    "google for startups",
-    "aws startups",
+_APPLICATION_REQUIRED_PHRASES = (
+    "application required",
+    "must apply",
+    "apply to attend",
+    "selection process",
 )
 
 
@@ -86,63 +69,52 @@ class DiscoveredEvent(BaseModel):
     source_payload: dict[str, Any] = Field(default_factory=dict)
 
 
-def _normalized_text(value: str | None) -> str:
-    if not value:
-        return ""
-    text = _TAG_RE.sub(" ", value)
-    text = html.unescape(text)
-    return " ".join(text.split())
-
-
-def _extract_tags(text: str, mapping: dict[str, tuple[str, ...]]) -> list[str]:
-    haystack = text.lower()
-    return [tag for tag, phrases in mapping.items() if any(p in haystack for p in phrases)]
-
-
-def _parse_datetime(value: Any) -> datetime | None:
-    if not value:
-        return None
-    s = str(value).strip()
-    if not s:
-        return None
-    try:
-        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
-    return dt.astimezone(UTC)
-
-
 def _event_source_id(url: str, starts_at: datetime, name: str) -> str:
     stable = f"{url}|{starts_at.isoformat()}|{name.lower().strip()}"
     digest = hashlib.sha1(stable.encode("utf-8")).hexdigest()  # nosec B324
     return f"event:{digest}"
 
 
-def _iter_event_nodes(node: Any) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    stack = [node]
-    while stack:
-        cur = stack.pop()
-        if isinstance(cur, list):
-            stack.extend(cur)
+def _is_event_node(node: dict[str, Any]) -> bool:
+    node_type = node.get("@type")
+    if isinstance(node_type, list):
+        return any(str(item).lower() == "event" for item in node_type)
+    return str(node_type).lower() == "event"
+
+
+def _iter_event_nodes(root: Any) -> list[dict[str, Any]]:
+    """Collect every Event node reachable from `root`, in document order.
+
+    Walks all nested lists and dict values so Event nodes are found regardless
+    of the container that wraps them (`@graph`, `itemListElement`, `subEvent`).
+    Breadth-first traversal keeps the provider's own ordering, which listing
+    pages use to express relevance.
+    """
+    found: list[dict[str, Any]] = []
+    queue: deque[Any] = deque([root])
+    seen: set[int] = set()
+
+    while queue:
+        current = queue.popleft()
+        if isinstance(current, list):
+            queue.extend(current)
             continue
-        if not isinstance(cur, dict):
+        if not isinstance(current, dict):
             continue
 
-        node_type = cur.get("@type")
-        if isinstance(node_type, list):
-            is_event = any(str(t).lower() == "event" for t in node_type)
-        else:
-            is_event = str(node_type).lower() == "event"
-        if is_event:
-            out.append(cur)
+        # Guard against the self-referencing structures some sites emit.
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
 
-        graph = cur.get("@graph")
-        if graph is not None:
-            stack.append(graph)
-    return out
+        if _is_event_node(current):
+            found.append(current)
+
+        for value in current.values():
+            if isinstance(value, (dict, list)):
+                queue.append(value)
+
+    return found
 
 
 def _parse_location(
@@ -157,23 +129,25 @@ def _parse_location(
                 return parsed
         return False, None, None, None, None
     if isinstance(location_raw, str):
-        text = _normalized_text(location_raw)
+        text = normalize_text(location_raw)
         return False, text or None, None, None, None
     if not isinstance(location_raw, dict):
         return False, None, None, None, None
 
     location_type = str(location_raw.get("@type") or "").lower()
     if location_type == "virtuallocation":
-        name = _normalized_text(str(location_raw.get("name") or "Virtual"))
-        return True, name or "Virtual", None, None, None
+        name = normalize_text(location_raw.get("name")) or "Virtual"
+        return True, name, None, None, None
 
-    name = _normalized_text(location_raw.get("name"))
+    name = normalize_text(location_raw.get("name"))
     address = location_raw.get("address")
     city = region = country = None
     if isinstance(address, dict):
-        city = _normalized_text(address.get("addressLocality")) or None
-        region = _normalized_text(address.get("addressRegion")) or None
-        country = _normalized_text(address.get("addressCountry")) or None
+        city = normalize_text(address.get("addressLocality")) or None
+        region = normalize_text(address.get("addressRegion")) or None
+        country = normalize_text(address.get("addressCountry")) or None
+    elif isinstance(address, str):
+        name = name or normalize_text(address)
     location_text = ", ".join(v for v in [name, city, region, country] if v) or None
     return False, location_text, city, region, country
 
@@ -184,9 +158,7 @@ def _parse_cost_usd_cents(offers_raw: Any) -> int | None:
         return None
     price = offers.get("price")
     currency = str(offers.get("priceCurrency") or "USD").upper()
-    if currency != "USD":
-        return None
-    if price is None:
+    if currency != "USD" or price is None:
         return None
     if isinstance(price, str) and price.strip().lower() in {"free", "0", "$0"}:
         return 0
@@ -196,26 +168,28 @@ def _parse_cost_usd_cents(offers_raw: Any) -> int | None:
         return None
 
 
-def _host_quality_score(host_name: str | None) -> float:
-    if not host_name:
-        return 0.5
-    h = host_name.lower()
-    if any(p in h for p in _HIGH_QUALITY_HOST_PATTERNS):
-        return 0.85
-    return 0.55
+def _is_online_attendance_mode(value: Any) -> bool:
+    if not value:
+        return False
+    mode = str(value).rsplit("/", maxsplit=1)[-1].lower()
+    return mode in _ONLINE_ATTENDANCE_MODES
 
 
 def _application_required(description: str) -> bool:
-    d = description.lower()
-    return any(
-        phrase in d
-        for phrase in (
-            "application required",
-            "must apply",
-            "apply to attend",
-            "selection process",
-        )
-    )
+    haystack = description.lower()
+    return any(phrase in haystack for phrase in _APPLICATION_REQUIRED_PHRASES)
+
+
+def _parse_host_name(organizer_raw: Any) -> str | None:
+    if isinstance(organizer_raw, dict):
+        return normalize_text(organizer_raw.get("name")) or None
+    if isinstance(organizer_raw, list):
+        for item in organizer_raw:
+            if isinstance(item, dict):
+                name = normalize_text(item.get("name"))
+                if name:
+                    return name
+    return None
 
 
 def _build_discovered_event(
@@ -224,40 +198,25 @@ def _build_discovered_event(
     *,
     source_name: str,
 ) -> DiscoveredEvent | None:
-    name = _normalized_text(event_node.get("name"))
-    starts_at = _parse_datetime(event_node.get("startDate"))
+    name = normalize_text(event_node.get("name"))
+    starts_at = parse_iso_datetime(event_node.get("startDate"))
     if not name or starts_at is None:
         return None
 
-    ends_at = _parse_datetime(event_node.get("endDate"))
-    event_url = _normalized_text(event_node.get("url")) or source_url
-    description = _normalized_text(event_node.get("description"))
-
-    organizer = event_node.get("organizer")
-    host_name = None
-    if isinstance(organizer, dict):
-        host_name = _normalized_text(organizer.get("name")) or None
-    elif isinstance(organizer, list):
-        for item in organizer:
-            if isinstance(item, dict):
-                host_name = _normalized_text(item.get("name")) or host_name
+    ends_at = parse_iso_datetime(event_node.get("endDate"))
+    event_url = normalize_text(event_node.get("url")) or source_url
+    description = normalize_text(event_node.get("description"))
+    host_name = _parse_host_name(event_node.get("organizer"))
 
     is_virtual, location_text, city, region, country = _parse_location(
         event_node.get("location")
     )
+    if _is_online_attendance_mode(event_node.get("eventAttendanceMode")):
+        is_virtual = True
 
     context_text = " ".join(
-        value
-        for value in [name, description, host_name or "", location_text or ""]
-        if value
+        value for value in [name, description, host_name or "", location_text or ""] if value
     )
-    industry_tags = _extract_tags(context_text, _INDUSTRY_KEYWORDS)
-    stage_tags = _extract_tags(context_text, _STAGE_KEYWORDS)
-    benefit_tags = _extract_tags(context_text, _BENEFIT_KEYWORDS)
-    attendee_types = _extract_tags(context_text, _ATTENDEE_KEYWORDS)
-
-    now = datetime.now(UTC)
-    status = "expired" if (ends_at or starts_at) < now else "active"
 
     return DiscoveredEvent(
         source=source_name,
@@ -276,14 +235,14 @@ def _build_discovered_event(
         city=city,
         region=region,
         country=country,
-        industry_tags=industry_tags,
-        stage_tags=stage_tags,
-        benefit_tags=benefit_tags,
-        attendee_types=attendee_types,
+        industry_tags=extract_tags(context_text, INDUSTRY_KEYWORDS),
+        stage_tags=extract_tags(context_text, STAGE_KEYWORDS),
+        benefit_tags=extract_tags(context_text, BENEFIT_KEYWORDS),
+        attendee_types=extract_tags(context_text, ATTENDEE_KEYWORDS),
         cost_usd_cents=_parse_cost_usd_cents(event_node.get("offers")),
         application_required=_application_required(description),
-        host_quality_score=_host_quality_score(host_name),
-        status=status,
+        host_quality_score=host_quality_score(host_name),
+        status="expired" if (ends_at or starts_at) < datetime.now(UTC) else "active",
         source_payload=event_node,
     )
 
@@ -294,6 +253,7 @@ def parse_jsonld_events(
     *,
     source_name: str = "web_jsonld",
 ) -> list[DiscoveredEvent]:
+    """Extract every schema.org Event embedded in an HTML document."""
     events: list[DiscoveredEvent] = []
     seen_ids: set[str] = set()
     for raw_block in _JSONLD_SCRIPT_RE.findall(content):
@@ -305,11 +265,7 @@ def parse_jsonld_events(
         except json.JSONDecodeError:
             continue
         for node in _iter_event_nodes(decoded):
-            event = _build_discovered_event(
-                node,
-                source_url,
-                source_name=source_name,
-            )
+            event = _build_discovered_event(node, source_url, source_name=source_name)
             if event is None or event.source_id in seen_ids:
                 continue
             events.append(event)
