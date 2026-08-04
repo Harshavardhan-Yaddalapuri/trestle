@@ -10,9 +10,10 @@ from backend.core.errors import ConflictError
 from backend.db.models.event import Event
 from backend.db.models.profile import Profile
 from backend.schemas.event import EventMatchRequest
-from backend.services.events.discovery import _extract_jsonld_events, upsert_discovered_events
+from backend.services.events.discovery import upsert_discovered_events
 from backend.services.events.matching import evaluate_event, resolve_event_profile
 from backend.services.events.orchestration import run_events_discovery_sweep
+from backend.services.events.parser import parse_jsonld_events
 
 
 def _settings(**overrides) -> Settings:
@@ -30,7 +31,7 @@ def _settings(**overrides) -> Settings:
     return base
 
 
-def test_extract_jsonld_events_parses_basic_fields():
+def test_parse_jsonld_events_parses_basic_fields():
     html = """
     <html>
       <body>
@@ -60,7 +61,7 @@ def test_extract_jsonld_events_parses_basic_fields():
     </html>
     """
 
-    events = _extract_jsonld_events(html, "https://example.org/events")
+    events = parse_jsonld_events(html, "https://example.org/events")
     assert len(events) == 1
     event = events[0]
     assert event.name == "Boston Climate Founder Meetup"
@@ -74,7 +75,7 @@ def test_extract_jsonld_events_parses_basic_fields():
 
 async def test_upsert_discovered_events_inserts_and_updates(session_factory):
     now = datetime.now(UTC)
-    base = _extract_jsonld_events(
+    base = parse_jsonld_events(
         """
         <script type="application/ld+json">
           {"@type":"Event","name":"Founder Mixer","startDate":"2026-09-01T10:00:00Z","url":"https://x.test/event/1"}
@@ -154,7 +155,7 @@ def test_match_events_uses_profile_context():
 
 
 async def test_events_discovery_sweep_happy_path(session_factory, redis_client, monkeypatch):
-    discovered = _extract_jsonld_events(
+    discovered = parse_jsonld_events(
         """
         <script type="application/ld+json">
           {"@type":"Event","name":"Founder Mixer","startDate":"2026-09-01T10:00:00Z","url":"https://x.test/event/1"}
