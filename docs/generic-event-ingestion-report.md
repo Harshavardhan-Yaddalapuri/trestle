@@ -34,28 +34,38 @@ rather than fabricate structured records.
 | Source | URL tested | Result | Classification | Evidence / limitation |
 |---|---|---:|---|---|
 | Techstars | `https://www.techstars.com/events/search` | 31 found; 27 accepted; 4 cross-source duplicates | **C** | Existing custom adapter uses Techstars' public Typesense search configuration/API. It is more reliable than rendered HTML. |
-| MassChallenge | `https://masschallenge.org/events` | 0 static JSON-LD events | **D** | The page exposed no usable Event JSON-LD. Its WordPress feed produced dated posts, not reliable event records; a calendar/API adapter is needed. |
+| MassChallenge | `https://masschallenge.org/events/` | No schema.org records with LLM disabled | **A** | The server-rendered page exposes dated event cards. Current generic HTML extraction requires opt-in LLM extraction; validate its detail-page links before auto-accepting. |
 | Greentown Labs | `https://greentownlabs.com/events/` | 68 feed candidates; 3 accepted; 63 pending review | **C/D** | Linked RSS/ICS feeds are discoverable, but RSS publication timestamps are not reliable event start times. Keep feed records in review unless a calendar feed or adapter supplies event dates. |
-| BIO | `https://www.bio.org/events` | 0 static JSON-LD events | **D** | No usable Event nodes in the static response; a site-specific calendar/API strategy is recommended. |
-| SBA | `https://www.sba.gov/events` | 0 static JSON-LD events | **D** | Static response did not expose structured events. A government calendar feed/API or adapter is preferable. |
-| mHUB | `https://mhubchicago.com/events` | upstream HTTP 500 | **E** | The source could not be fetched reliably during the test. |
-| LabCentral | `https://www.labcentral.org/events` | upstream HTTP 404 | **E** | The tested public URL is not a live events endpoint; identify a maintained calendar/feed before ingesting. |
+| BIO | `https://www.bio.org/events` | No schema.org records with LLM disabled | **A** | The public listing renders conference names, dates, locations, and summaries. Registration may remain gated, but discovery metadata is public. |
+| SBA | `https://www.sba.gov/events` | No schema.org records with LLM disabled | **A** | The public listing includes type, format, timezone, price, and title. Stable filter parameters should be discovered before scheduled ingestion. |
+| mHUB | `https://www.mhubchicago.com/events` | Server response is source-sensitive | **A** | The public calendar and detail pages expose descriptions, dates, and venue. Generic HTML can work; filter recurring promotional content. |
+| LabCentral | `https://www.labcentral.org/events-and-media` | Corrected source URL | **A** | The page exposes upcoming titles, date strings, venue labels, and detail pages. Separate adjacent media/news content. |
 | Newlab | `https://www.newlab.com/events` | upstream HTTP 404 | **E** | The tested public URL is not a live events endpoint; identify a maintained calendar/feed before ingesting. |
-| DOE | `https://www.energy.gov/events` | upstream HTTP 404 | **E** | The tested public URL is not a live events endpoint; identify a maintained calendar/feed before ingesting. |
+| DOE | `https://www.energy.gov/search-calendar` | Search-shell response | **D** | No verified unified DOE event catalog/feed; build adapters by DOE office or defer. |
 
 ## Known platform classification
 
-| Source type | Recommended strategy | Classification | Why |
+| Source type | Representative public source / recommended strategy | Classification | Why |
 |---|---|---|---|
 | Eventbrite | Existing paginated JSON-LD adapter | **D** | Listing pages need pagination and Eventbrite's authenticated API does not provide general event discovery. |
 | Startup Grind | Existing REST adapter | **C** | Public list/detail API is richer and more stable than page parsing. |
 | Techstars | Existing Typesense adapter | **C** | Public search configuration/API is structured; the page is client-rendered. |
-| Meetup | Existing JSON-LD adapter, with source-specific pagination if needed | **D** | A single listing page works generically, but search/pagination and rate restrictions need provider handling. |
-| Luma | Existing JSON-LD adapter | **A/D** | Individual/listing pages can expose JSON-LD; broader discovery and pagination may need an adapter. |
+| Meetup | SF discovery; custom adapter | **D** | Public cards exist, but discovery is location-specific, personalized, and paginated with varying card fields. |
+| Luma | Langfuse/Newlab calendars; custom adapter | **D** | Public calendars expose titles/hosts/locations, but platform-specific calendar and event routes need dedicated pagination/date handling. |
 | LinkedIn Events | Do not scrape without an approved integration | **E** | Login, anti-bot controls, and dynamically loaded content make public extraction unreliable. |
-| YC / accelerator calendars | JSON-LD/feed first, then review | **A/C** | Works when a calendar provides structured event data; otherwise source-specific implementation is needed. |
-| University calendars | ICS/RSS preferred | **C** | Many institutions publish calendar feeds; generic HTML is inconsistent across vendors. |
-| Biotech, hardware, government, VC, coworking, climate, and utility sites | Feed/JSON-LD first; review queue otherwise | **A–D** | Reliability depends on the specific calendar vendor. The pipeline intentionally does not auto-insert weak HTML/RSS inferences. |
+| YC Events | `ycombinator.com/events`; static HTML | **A** | The public response exposes upcoming titles, dates, and locations. Detail-page metadata still needs validation. |
+| University entrepreneurship | UIUC Entrepreneurship Calendar; static HTML | **A** | Public monthly lists expose dated entries and event titles, but calendar software differs by institution. |
+| BioLabs | News & Events; custom adapter | **D** | Events and news are mixed on the listing; details have date/time/location but no clean catalog was observed. |
+| JLABS | No dedicated public event calendar observed | **E** | The inspected navigator/residency response has no usable events catalog. |
+| Newlab | Newlab Luma calendar; custom Luma adapter | **D** | The current response does not expose event cards; use platform calendar/detail routes and handle empty/client-rendered calendars. |
+| HAX / SOSV | `sosv.com/events`; static HTML | **A** | The list exposes titles/dates. Preserve access restrictions such as investor-only showcases. |
+| Greentown Labs | Calendar adapter | **D** | Category/month views and historical content require date-window filtering and stronger deduplication. |
+| America’s SBDC | Training Events; static HTML | **A** | National training events are dated; local SBDC calendars are decentralized. |
+| State innovation agencies | Massachusetts event-detail pages; static HTML | **A** | Detail pages provide time, fee, organizer, and description; organization pages can be empty/past-only. |
+| Chambers | Greater Boston Chamber calendar; static HTML | **A** | Public listings expose time/location/categories, but calendar vendors and member gates vary. |
+| Coworking / hubs | Venture Lane calendar; static HTML | **A** | Calendar entries are public; fetch adjacent month pages and deduplicate recurring entries. |
+| VC events | General Catalyst one-off RSVP | **E** | Individual public invites exist, but no dependable public discovery calendar was observed. |
+| Utility innovation | EPRI Europe events; static HTML + `?page=` | **A** | Public pagination and descriptions are available; preserve invitation-only restrictions. |
 
 ## Accuracy and duplicate behavior
 
