@@ -142,3 +142,11 @@ async def test_browser_rendering_is_opt_in_and_used_after_static_failure(session
 
     assert "browser" in (run.strategy or "")
     assert run.records_accepted == 1
+
+
+@pytest.mark.parametrize("source_url", ["file:///etc/passwd", "http://127.0.0.1:8000", "http://user:pass@example.test/events"])
+async def test_private_or_malformed_urls_are_not_fetched(session_factory, source_url):
+    run = await GenericEventPipeline(session_factory, _settings()).discover(source_url)
+
+    assert run.records_found == 0
+    assert run.error is not None

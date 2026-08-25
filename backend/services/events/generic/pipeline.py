@@ -7,6 +7,7 @@ Only high-confidence, validated candidates are inserted automatically.
 from __future__ import annotations
 
 import uuid
+import ipaddress
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
@@ -43,6 +44,7 @@ class GenericEventPipeline:
             session.add(run)
             await session.commit()
         try:
+            _validate_source_url(source_url)
             batches = await self._extract(source_url, allow_browser=allow_browser)
             run.strategy = ",".join(batch.method for batch in batches)
             run.diagnostics = {"strategies": [batch.model_dump(exclude={"events"}) for batch in batches]}
@@ -168,3 +170,16 @@ async def _upsert_provenance(session: AsyncSession, event_id: uuid.UUID, candida
         existing.field_confidences = item.field_confidences
         return
     session.add(EventProvenance(event_id=event_id, candidate_id=candidate.id, source_url=candidate.source_url, source_identifier=candidate.source_identifier, extraction_method=candidate.extraction_method, field_confidences=item.field_confidences, evidence=item.evidence, raw_payload=item.raw_payload, content_hash=candidate.content_hash))
+
+
+def _validate_source_url(source_url: str) -> None:
+    """Reject obvious SSRF targets before an arbitrary URL reaches a fetcher."""
+    parsed = urlparse(source_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("source_url must be an absolute http(s) URL without credentials")
+    try:
+        address = ipaddress.ip_address(parsed.hostname)
+    except ValueError:
+        return
+    if not address.is_global:
+        raise ValueError("source_url must not target a private or reserved IP address")
