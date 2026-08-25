@@ -184,6 +184,8 @@ class Settings(BaseSettings):
     EVENTS_DISCOVERY_INTERVAL_HOURS: int = Field(default=12)
     EVENTS_REDIS_LOCK_TTL_SECONDS: int = Field(default=1800)
     EVENTS_SOURCE_URLS: str = Field(default="")
+    EVENTS_GENERIC_LLM_ENABLED: bool = Field(default=False)
+    EVENTS_GENERIC_BROWSER_ENABLED: bool = Field(default=False)
 
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":

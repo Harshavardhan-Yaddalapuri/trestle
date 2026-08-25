@@ -19,10 +19,15 @@ _FALLBACK_ADAPTER = GenericJsonLdAdapter()
 
 
 def get_adapter_for_source_url(source_url: str) -> EventSourceAdapter:
+    return get_custom_adapter_for_source_url(source_url) or _FALLBACK_ADAPTER
+
+
+def get_custom_adapter_for_source_url(source_url: str) -> EventSourceAdapter | None:
+    """Return a known provider adapter; unknown hosts are left to generic discovery."""
     for adapter in _ADAPTERS:
         if adapter.supports(source_url):
             return adapter
-    return _FALLBACK_ADAPTER
+    return None
 
 
 def list_adapters() -> list[EventSourceAdapter]:

@@ -18,9 +18,13 @@ from backend.schemas.event import (
     EventMatchRequest,
     EventMatchResponse,
     EventSummary,
+    GenericEventDiscoveryRequest,
+    GenericEventDiscoveryResponse,
 )
+from backend.services.events.generic.pipeline import GenericEventPipeline
 from backend.services.events.matching import evaluate_event, is_event_active, resolve_event_profile
 from backend.services.events.orchestration import run_events_discovery_sweep
+from backend.services.llm.dependency import get_llm_client
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -63,6 +67,24 @@ async def discover_events(
     )
 
 
+@router.post("/discover/generic", response_model=GenericEventDiscoveryResponse)
+async def discover_generic_events(
+    body: GenericEventDiscoveryRequest,
+    session_factory = Depends(get_db_factory),
+    settings: Settings = Depends(get_settings),
+) -> GenericEventDiscoveryResponse:
+    """Discover an arbitrary source with custom/API/feed/JSON-LD/LLM strategies."""
+    allow_browser = body.allow_browser and settings.EVENTS_GENERIC_BROWSER_ENABLED
+    llm = get_llm_client() if settings.EVENTS_GENERIC_LLM_ENABLED else None
+    run = await GenericEventPipeline(session_factory, settings, llm).discover(
+        body.source_url, allow_browser=allow_browser
+    )
+    return GenericEventDiscoveryResponse(
+        run_id=run.id, source_url=run.source_url, strategy=run.strategy,
+        found=run.records_found, accepted=run.records_accepted,
+        pending_review=run.records_pending_review, rejected=run.records_rejected,
+        duplicates=run.records_duplicates, error=run.error,
+    )
 @router.get("", response_model=EventListResponse)
 async def list_events(
     limit: int = Query(_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),

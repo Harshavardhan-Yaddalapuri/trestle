@@ -83,6 +83,23 @@ class EventDiscoveryResponse(BaseModel):
     sources_scanned: int
 
 
+class GenericEventDiscoveryRequest(BaseModel):
+    source_url: str
+    allow_browser: bool = False
+
+
+class GenericEventDiscoveryResponse(BaseModel):
+    run_id: uuid.UUID
+    source_url: str
+    strategy: str | None = None
+    found: int
+    accepted: int
+    pending_review: int
+    rejected: int
+    duplicates: int
+    error: str | None = None
+
+
 class EventSeed(BaseModel):
     source_id: str
     source: str = "seed_demo"
