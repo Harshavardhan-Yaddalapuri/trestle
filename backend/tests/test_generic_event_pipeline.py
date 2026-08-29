@@ -172,6 +172,25 @@ async def test_naive_llm_datetime_is_normalized_before_persistence(session_facto
     assert candidate.normalized_data["starts_at"] == "2030-09-01T18:00:00Z"
 
 
+async def test_past_llm_event_is_rejected_not_inserted(session_factory):
+    class _PastDateLlm:
+        async def complete(self, *args, **kwargs):
+            return LLMResponse(
+                content="""{"events":[{"name":"Past event","starts_at":"2020-09-01T18:00:00Z","field_confidences":{"name":0.9,"starts_at":0.9}}]}"""
+            )
+
+    with respx.mock:
+        respx.get("https://plain.test/events").mock(return_value=httpx.Response(200, text="<h1>Events</h1>"))
+        run = await GenericEventPipeline(session_factory, _settings(), _PastDateLlm()).discover(
+            "https://plain.test/events"
+        )
+
+    assert (run.records_accepted, run.records_rejected) == (0, 1)
+    async with session_factory() as session:
+        candidate = (await session.execute(sa.select(EventCandidate))).scalar_one()
+    assert candidate.validation_errors == ["starts_at_in_past"]
+
+
 async def test_browser_rendering_is_opt_in_and_used_after_static_failure(session_factory, monkeypatch):
     async def _render(url: str, timeout_ms: int) -> str:
         assert url == "https://rendered.test/events"

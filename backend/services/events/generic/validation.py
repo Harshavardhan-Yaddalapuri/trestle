@@ -19,6 +19,8 @@ def validate(candidate: ExtractedEvent, *, extraction_method: str) -> Validation
         errors.append("missing_starts_at")
     elif candidate.starts_at > datetime.now(UTC) + timedelta(days=3650):
         errors.append("implausible_starts_at")
+    elif candidate.starts_at < datetime.now(UTC):
+        errors.append("starts_at_in_past")
     if candidate.ends_at and candidate.starts_at and candidate.ends_at < candidate.starts_at:
         errors.append("ends_before_start")
     if candidate.price_usd_cents is not None and candidate.price_usd_cents > 100_000_000:
