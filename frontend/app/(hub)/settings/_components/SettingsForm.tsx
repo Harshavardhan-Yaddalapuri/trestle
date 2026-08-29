@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { AlertFrequency, UserSettings } from "@/lib/domain/settings";
+import { apiClient, type AlertPreferences } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,114 +12,72 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const frequencies: { value: AlertFrequency; label: string }[] = [
-  { value: "immediate", label: "Immediate" },
-  { value: "daily", label: "Daily digest" },
-  { value: "weekly", label: "Weekly summary" },
-];
+export default function SettingsForm({ initial }: { initial: AlertPreferences }) {
+  const [preferences, setPreferences] = useState(initial);
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [saving, setSaving] = useState(false);
 
-export default function SettingsForm({ initial }: { initial: UserSettings }) {
-  const [settings, setSettings] = useState(initial);
-  const [saved, setSaved] = useState(false);
-
-  function patchNotifications(partial: Partial<UserSettings["notifications"]>) {
-    setSettings((s) => ({
-      ...s,
-      notifications: { ...s.notifications, ...partial },
-    }));
-    setSaved(false);
+  function patch(partial: Partial<AlertPreferences>) {
+    setPreferences((current) => ({ ...current, ...partial }));
+    setStatus("idle");
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaved(true);
+    setSaving(true);
+    setStatus("idle");
+    try {
+      setPreferences(await apiClient.updateAlertPreferences(preferences));
+      setStatus("saved");
+    } catch {
+      setStatus("error");
+    } finally {
+      setSaving(false);
+    }
   }
-
-  const n = settings.notifications;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {saved && (
+      {status === "saved" && (
         <p
           className="rounded-lg bg-secondary-container text-on-secondary-container px-4 py-3 text-sm"
           role="status"
         >
-          Preferences kept in this session only until a settings API exists.
+          Alert preferences saved.
         </p>
       )}
+      {status === "error" && <p className="rounded-lg bg-error-container text-on-error-container px-4 py-3 text-sm" role="alert">We could not save your alert preferences. Please try again.</p>}
 
       <Card className="border-outline-variant shadow-none bg-surface-container-lowest">
         <CardHeader>
-          <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">Notifications</CardTitle>
-          <CardDescription>Channels and alert cadence for grant deadlines and matches.</CardDescription>
+          <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">Alerts</CardTitle>
+          <CardDescription>Choose the opportunity updates that matter to your company.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <ToggleRow
-            id="email"
-            label="Email alerts"
-            description="Deadlines and high-confidence matches."
-            checked={n.emailAlerts}
-            onChange={(v) => patchNotifications({ emailAlerts: v })}
+            id="deadlines"
+            label="Deadline reminders"
+            description="A heads-up before grants you are tracking close."
+            checked={preferences.deadline_reminders}
+            onChange={(value) => patch({ deadline_reminders: value })}
           />
           <ToggleRow
-            id="inapp"
-            label="In-app alerts"
-            description="Bell feed inside Trestle Hub."
-            checked={n.inAppAlerts}
-            onChange={(v) => patchNotifications({ inAppAlerts: v })}
+            id="new-matches"
+            label="New grant matches"
+            description="Let Trestle notify you when a new opportunity fits your profile."
+            checked={preferences.new_grant_matches}
+            onChange={(value) => patch({ new_grant_matches: value })}
           />
           <ToggleRow
-            id="digest"
-            label="Weekly digest"
-            description="Curated roundup of new programs."
-            checked={n.weeklyDigest}
-            onChange={(v) => patchNotifications({ weeklyDigest: v })}
+            id="check-ins"
+            label="Application check-ins"
+            description="A reminder when a tracked grant has not been updated recently."
+            checked={preferences.check_ins}
+            onChange={(value) => patch({ check_ins: value })}
           />
-
-          <div className="space-y-2">
-            <Label className="text-base">Alert frequency</Label>
-            <p className="text-xs text-on-surface-variant">
-              How often to batch non-critical reminders (mock control).
-            </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {frequencies.map((f) => (
-                <button
-                  key={f.value}
-                  type="button"
-                  onClick={() => patchNotifications({ alertFrequency: f.value })}
-                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                    n.alertFrequency === f.value
-                      ? "bg-secondary-container text-on-secondary-container border-transparent"
-                      : "border-outline-variant text-on-surface-variant hover:bg-surface-variant/60"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </CardContent>
       </Card>
-
-      <Card className="border-outline-variant shadow-none bg-surface-container-lowest">
-        <CardHeader>
-          <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">Account</CardTitle>
-          <CardDescription>Authentication provider TBD — placeholders only.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" disabled>
-            Change email
-          </Button>
-          <Button type="button" variant="outline" disabled>
-            Change password
-          </Button>
-          <Button type="button" variant="destructive" disabled>
-            Delete account
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Button type="submit">Save settings (preview)</Button>
+      <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save alert preferences"}</Button>
     </form>
   );
 }

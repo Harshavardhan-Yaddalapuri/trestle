@@ -91,6 +91,7 @@ export interface ProfileIn {
   incorporated?: boolean | null;
   incorporation_country?: string | null;
   incorporation_state?: string | null;
+  regulatory_status?: Record<string, unknown> | null;
 }
 
 export interface ProfileOut {
@@ -111,8 +112,15 @@ export interface ProfileOut {
   incorporated: boolean | null;
   incorporation_country: string | null;
   incorporation_state: string | null;
+  regulatory_status: Record<string, unknown>;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface AlertPreferences {
+  deadline_reminders: boolean;
+  new_grant_matches: boolean;
+  check_ins: boolean;
 }
 
 export interface ChatMessageIn {
@@ -313,6 +321,15 @@ export const apiClient = {
 
   updateProfile: (data: ProfileIn) =>
     request<ProfileOut>("/api/users/profile", {
+      method: "PUT",
+      body: data,
+    }),
+
+  getAlertPreferences: () =>
+    request<AlertPreferences>("/api/users/alert-preferences"),
+
+  updateAlertPreferences: (data: Partial<AlertPreferences>) =>
+    request<AlertPreferences>("/api/users/alert-preferences", {
       method: "PUT",
       body: data,
     }),

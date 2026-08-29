@@ -1,22 +1,12 @@
 import Link from "next/link";
-import FilterDropdown from "@/components/filter-dropdown";
-import { fetchEvents, fetchMatchedEvents } from "@/lib/api/events";
+import { fetchMatchedEvents } from "@/lib/api/events";
 import type { ApiEventSummary } from "@/lib/api/events-types";
-import {
-  buildEventsListHref,
-  EVENT_DEMO_PROFILE_LABELS,
-  EVENT_DEMO_PROFILE_OPTIONS,
-  parseEventsListQuery,
-} from "@/lib/events-list-query";
+import type { ProfileOut } from "@/lib/api";
+import { getProfileReadiness } from "@/lib/profile-readiness";
+import { serverRequest } from "@/lib/api/server";
 
 export const metadata = {
   title: "Events - Trestle",
-};
-
-type PageProps = {
-  searchParams: Promise<{
-    profile?: string;
-  }>;
 };
 
 function formatDateRange(startsAt: string, endsAt: string | null): string {
@@ -40,45 +30,15 @@ function getLocationLabel(event: ApiEventSummary): string {
   return event.location_text ?? event.city ?? event.region ?? event.country ?? "Virtual";
 }
 
-const DEMO_PROFILE_MATCH_PARAMS = {
-  ai_seed_founder: {
-    stage: "seed",
-    industry: ["ai"],
-    location: "new york",
-    goals: ["fundraising", "networking"],
-  },
-  biotech_founder: {
-    stage: "pre_seed",
-    industry: ["biotech"],
-    location: "cambridge",
-    goals: ["partnerships", "lab access"],
-  },
-  climate_operator: {
-    stage: "series_a",
-    industry: ["climate"],
-    location: "san francisco",
-    goals: ["partnerships", "fundraising"],
-  },
-} as const;
-
-export default async function EventsPage({ searchParams }: PageProps) {
-  const sp = await searchParams;
-  const query = parseEventsListQuery(sp);
-  const selectedProfile = query.profile ?? "none";
-
+export default async function EventsPage() {
   let events: ApiEventSummary[] = [];
   let loadError: string | null = null;
+  let profile: ProfileOut | null = null;
 
   try {
-    if (selectedProfile === "none") {
-      const response = await fetchEvents({ limit: 50 });
-      events = response.items;
-    } else {
-      const response = await fetchMatchedEvents({
-        ...DEMO_PROFILE_MATCH_PARAMS[selectedProfile],
-        limit: 50,
-        minScore: 0.2,
-      });
+    profile = await serverRequest<ProfileOut>("/api/users/profile");
+    if (getProfileReadiness(profile).eventsReady) {
+      const response = await fetchMatchedEvents({ limit: 50, minScore: 0.2 });
       events = response.results.map((row) => row.event);
     }
   } catch (err) {
@@ -86,13 +46,7 @@ export default async function EventsPage({ searchParams }: PageProps) {
       err instanceof Error ? err.message : "Could not load events from the API.";
   }
 
-  const profileOptions = EVENT_DEMO_PROFILE_OPTIONS.map((profile) => ({
-    value: profile,
-    label: EVENT_DEMO_PROFILE_LABELS[profile],
-    href: buildEventsListHref({
-      profile,
-    }),
-  }));
+  const readiness = profile ? getProfileReadiness(profile) : null;
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -104,13 +58,8 @@ export default async function EventsPage({ searchParams }: PageProps) {
           Events
         </h1>
         <p className="text-on-surface-variant mt-1 text-sm md:text-base">
-          Demo-friendly events from the local database. No login required.
+          Events matched to your saved founder profile.
         </p>
-        {selectedProfile !== "none" ? (
-          <p className="text-on-surface-variant mt-1 text-xs md:text-sm">
-            Showing scored matches for: {EVENT_DEMO_PROFILE_LABELS[selectedProfile]}.
-          </p>
-        ) : null}
       </div>
 
       {loadError ? (
@@ -122,15 +71,18 @@ export default async function EventsPage({ searchParams }: PageProps) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <FilterDropdown
-          label="Founder profile"
-          options={profileOptions}
-          value={selectedProfile}
-        />
-      </div>
-
-      <div className="rounded-xl border border-outline-variant overflow-hidden bg-surface-container-lowest">
+      {readiness && !readiness.eventsReady ? (
+        <div className="rounded-2xl bg-secondary-container/40 p-6 text-on-surface">
+          <h2 className="font-medium">Complete your event preferences</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Add your stage, industry, location, and goals so Trestle can rank events for you.
+          </p>
+          <Link className="mt-4 inline-flex rounded-full bg-primary px-4 py-2 text-sm font-medium text-on-primary" href="/profile">
+            Complete profile
+          </Link>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-outline-variant overflow-hidden bg-surface-container-lowest">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-container text-on-surface-variant text-xs uppercase tracking-wide">
             <tr>
@@ -144,8 +96,7 @@ export default async function EventsPage({ searchParams }: PageProps) {
             {events.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-on-surface-variant">
-                  No events found for this founder profile yet. Try switching to
-                  "None (all events)".
+                  No current events match your profile. Check back soon as sources update.
                 </td>
               </tr>
             ) : (
@@ -181,7 +132,8 @@ export default async function EventsPage({ searchParams }: PageProps) {
             )}
           </tbody>
         </table>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

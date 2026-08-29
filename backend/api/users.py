@@ -7,11 +7,10 @@ import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.errors import AuthenticationError
 from backend.db.models.profile import Profile
 from backend.db.models.user import User
 from backend.db.session import get_db
-from backend.middleware.auth import UserCtx, get_identity, owner_clause
+from backend.middleware.auth import get_identity, owner_clause
 from backend.schemas.alerts import AlertPreferencesIn, AlertPreferencesOut
 from backend.schemas.profile import ProfileIn, ProfileOut
 
@@ -24,15 +23,16 @@ _PREF_DEFAULTS = {
 }
 
 
-def _require_user(request: Request) -> UserCtx:
-    """Dependency: returns the UserCtx bound by SupabaseAuthMiddleware.
+async def _alert_preferences_owner(request: Request, db: AsyncSession) -> User | None:
+    """Resolve a real user when authenticated or a stable demo owner by session."""
+    current_user = getattr(request.state, "user", None)
+    if current_user is not None:
+        result = await db.execute(sa.select(User).where(User.id == current_user.id))
+        return result.scalar_one_or_none()
 
-    Raises 401 if no authenticated user is on the request.
-    """
-    user = getattr(request.state, "user", None)
-    if user is None:
-        raise AuthenticationError("Authentication required")
-    return user
+    _, session_id = get_identity(request)
+    result = await db.execute(sa.select(User).where(User.sub == f"anonymous:{session_id}"))
+    return result.scalar_one_or_none()
 
 
 @router.get("/profile", response_model=ProfileOut)
@@ -123,11 +123,9 @@ async def upsert_profile(
 @router.get("/alert-preferences", response_model=AlertPreferencesOut)
 async def get_alert_preferences(
     request: Request,
-    current_user: UserCtx = Depends(_require_user),
     db: AsyncSession = Depends(get_db),
 ) -> AlertPreferencesOut:
-    result = await db.execute(sa.select(User).where(User.id == current_user.id))
-    user = result.scalar_one_or_none()
+    user = await _alert_preferences_owner(request, db)
 
     if user is None:
         # User row not yet provisioned — return defaults.
@@ -149,18 +147,27 @@ async def get_alert_preferences(
 async def update_alert_preferences(
     body: AlertPreferencesIn,
     request: Request,
-    current_user: UserCtx = Depends(_require_user),
     db: AsyncSession = Depends(get_db),
 ) -> AlertPreferencesOut:
-    result = await db.execute(sa.select(User).where(User.id == current_user.id))
-    user = result.scalar_one_or_none()
+    user = await _alert_preferences_owner(request, db)
 
     if user is None:
-        # Provision user row on first preference update.
+        current_user = getattr(request.state, "user", None)
+        _, session_id = get_identity(request)
+        # Keep anonymous preferences in the existing preference store while
+        # leaving founder/company fields solely on Profile.
         user = User(
-            id=current_user.id,
-            sub=current_user.sub,
-            email=current_user.email,
+            id=(
+                current_user.id
+                if current_user is not None
+                else uuid.uuid5(uuid.NAMESPACE_URL, f"trestle:{session_id}")
+            ),
+            sub=(
+                current_user.sub
+                if current_user is not None
+                else f"anonymous:{session_id}"
+            ),
+            email=current_user.email if current_user is not None else None,
             alert_prefs={},
         )
         db.add(user)
