@@ -85,7 +85,9 @@ class GenericEventPipeline:
                     batches.append(extract_ics(feed_response.text, feed_url))
                 else:
                     batches.append(extract_rss(feed_response.text, feed_url))
-            if any(batch.events for batch in batches):
+            # RSS publication dates are only review-level evidence. Do not let
+            # a linked news feed suppress static-page event extraction.
+            if any(batch.events and batch.method in {"ics", "jsonld"} for batch in batches):
                 return batches
             page_text = extract_readable_html(content)
             if self._llm:

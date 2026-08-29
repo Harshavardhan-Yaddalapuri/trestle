@@ -128,6 +128,50 @@ async def test_rss_requires_review_due_to_weaker_date_confidence(session_factory
     assert run.records_pending_review == 1
 
 
+async def test_linked_rss_does_not_suppress_static_page_llm_extraction(session_factory):
+    class _EventLlm:
+        async def complete(self, *args, **kwargs):
+            return LLMResponse(
+                content="""{"events":[{"name":"Static event","starts_at":"2030-09-01T18:00:00Z","field_confidences":{"name":0.9,"starts_at":0.9}}]}"""
+            )
+
+    rss = """<?xml version="1.0"?><rss><channel><item>
+    <title>News post</title><link>https://plain.test/news</link>
+    <pubDate>Sun, 01 Sep 2030 18:00:00 GMT</pubDate></item></channel></rss>"""
+    page = '<link rel="alternate" type="application/rss+xml" href="/feed.xml"><h1>Events</h1>'
+    with respx.mock:
+        respx.get("https://plain.test/events").mock(return_value=httpx.Response(200, text=page))
+        respx.get("https://plain.test/feed.xml").mock(
+            return_value=httpx.Response(200, text=rss, headers={"content-type": "application/rss+xml"})
+        )
+        run = await GenericEventPipeline(session_factory, _settings(), _EventLlm()).discover(
+            "https://plain.test/events"
+        )
+
+    assert run.strategy == "jsonld,rss,llm"
+    assert (run.records_accepted, run.records_pending_review) == (1, 1)
+
+
+async def test_naive_llm_datetime_is_normalized_before_persistence(session_factory):
+    class _NaiveDateLlm:
+        async def complete(self, *args, **kwargs):
+            return LLMResponse(
+                content="""{"events":[{"name":"Date-only event","starts_at":"2030-09-01T18:00:00","field_confidences":{"name":0.9,"starts_at":0.9}}]}"""
+            )
+
+    with respx.mock:
+        respx.get("https://plain.test/events").mock(return_value=httpx.Response(200, text="<h1>Events</h1>"))
+        run = await GenericEventPipeline(session_factory, _settings(), _NaiveDateLlm()).discover(
+            "https://plain.test/events"
+        )
+
+    assert run.error is None
+    assert run.records_accepted == 1
+    async with session_factory() as session:
+        event = (await session.execute(sa.select(Event))).scalar_one()
+    assert event.starts_at == datetime(2030, 9, 1, 18, tzinfo=UTC)
+
+
 async def test_browser_rendering_is_opt_in_and_used_after_static_failure(session_factory, monkeypatch):
     async def _render(url: str, timeout_ms: int) -> str:
         assert url == "https://rendered.test/events"

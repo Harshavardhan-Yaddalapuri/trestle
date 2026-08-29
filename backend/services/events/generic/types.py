@@ -1,10 +1,10 @@
 """Transport types for generic event discovery; no database dependency."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 ExtractionMethod = Literal["custom_adapter", "api", "ics", "rss", "jsonld", "html", "browser", "llm"]
 
@@ -35,6 +35,16 @@ class ExtractedEvent(BaseModel):
     field_confidences: dict[str, float] = Field(default_factory=dict)
     evidence: dict[str, str] = Field(default_factory=dict)
     raw_payload: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def normalize_datetimes_to_utc(cls, value: datetime | None) -> datetime | None:
+        """Keep generic persistence and duplicate checks timezone-safe."""
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
 
 class ExtractionBatch(BaseModel):
