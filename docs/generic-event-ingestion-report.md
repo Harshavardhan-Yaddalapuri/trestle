@@ -43,6 +43,39 @@ rather than fabricate structured records.
 | Newlab | `https://www.newlab.com/events` | upstream HTTP 404 | **E** | The tested public URL is not a live events endpoint; identify a maintained calendar/feed before ingesting. |
 | DOE | `https://www.energy.gov/search-calendar` | Search-shell response | **D** | No verified unified DOE event catalog/feed; build adapters by DOE office or defer. |
 
+## LLM-enabled static HTML results — 2026-08-29
+
+This sweep enabled DeepSeek only in the Cloud Agent's ignored local `.env`.
+`EVENTS_GENERIC_LLM_ENABLED=true` and
+`EVENTS_GENERIC_BROWSER_ENABLED=false`; tracked defaults remain disabled. Each
+run used ephemeral SQLite persistence, so it did not alter a local Postgres
+database. The generic pipeline, including its normal validation and review
+decisions, was exercised without browser rendering.
+
+| Source | HTTP/access outcome | Strategies | Found / accepted / pending / rejected / duplicates | Result and evidence review |
+|---|---|---|---:|---|
+| MassChallenge | 200; linked feeds also returned 200 after one redirect | JSON-LD, 3 RSS feeds, LLM | 14 / 4 / 0 / 10 / 0 | Four future dates (Sep. 1, Sep. 10, Oct. 21, and Oct. 29, 2026) had exact title/date/location text evidence. Six RSS news/post records and four dated but past listing records were rejected. |
+| BIO | 200 | JSON-LD, LLM | 0 / 0 / 0 / 0 / 0 | The current static response yielded no dated upcoming event records. This is an empty extraction, not evidence that the source has no events. |
+| SBA | 302 to `legacy.sba.gov`, then 200 | JSON-LD, LLM | 10 / 10 / 0 / 0 / 0 | Returned dated online/in-person listings, including title, date/time, timezone, and price evidence. The same Mississippi event title occurs in multiple explicitly dated timezone variants; without URL, organizer, or city the generic dedupe rule correctly does not collapse them. |
+| LabCentral | 200 | JSON-LD, LLM | 3 / 3 / 0 / 0 / 0 | Returned BioMarin Golden Ticket, Thermo Fisher Mass Spectrometry Kick-Off, and Eppendorf Waffle Breakfast. Each has exact title, `MM.DD.YY` date, and `LabCentral 700` venue evidence. |
+
+The sweep exposed two generic defects and both are covered by deterministic
+tests:
+
+- Low-confidence linked RSS records previously prevented a static-page LLM
+  pass. ICS and JSON-LD remain terminal strategies, while RSS no longer
+  suppresses a static LLM pass.
+- An LLM date without an offset could mix naive and aware datetimes during
+  duplicate checking. Generic extracted datetimes now normalize to UTC before
+  persistence, and past events are rejected rather than entering canonical
+  `events`.
+
+This is a transparent source-evidence sample, not a manually labeled
+ground-truth benchmark. It therefore makes no extraction-accuracy percentage
+claim. In particular, BIO's empty result and SBA's repeated title should be
+reviewed with a source-specific labeled set before automatic LLM acceptance is
+enabled broadly.
+
 ## Known platform classification
 
 | Source type | Representative public source / recommended strategy | Classification | Why |
