@@ -29,7 +29,9 @@ export default function StructuredOnboardingPage() {
       setForm(profile);
       setRaised(profile.funding_raised_usd_cents === null ? "" : String(profile.funding_raised_usd_cents / 100));
       setTarget(profile.funding_target_usd_cents === null ? "" : String(profile.funding_target_usd_cents / 100));
-    }).catch(() => setError("We could not load your profile. You can still start filling it in.")).finally(() => setLoading(false));
+    }).catch(() => {
+      // A first-time anonymous session has no profile to hydrate yet.
+    }).finally(() => setLoading(false));
   }, []);
 
   function toggle(field: "industry" | "goals", value: string) {
