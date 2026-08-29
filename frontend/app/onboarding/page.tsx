@@ -243,7 +243,7 @@ export default function OnboardingPage() {
               Trestle Onboarding
             </h1>
             <p className="text-on-surface-variant" style={{ fontSize: "12px", fontWeight: 500 }}>
-              Let's build your founder profile
+              Let&apos;s build your founder profile
             </p>
           </div>
         </div>
