@@ -168,8 +168,8 @@ async def test_naive_llm_datetime_is_normalized_before_persistence(session_facto
     assert run.error is None
     assert run.records_accepted == 1
     async with session_factory() as session:
-        event = (await session.execute(sa.select(Event))).scalar_one()
-    assert event.starts_at == datetime(2030, 9, 1, 18, tzinfo=UTC)
+        candidate = (await session.execute(sa.select(EventCandidate))).scalar_one()
+    assert candidate.normalized_data["starts_at"] == "2030-09-01T18:00:00Z"
 
 
 async def test_browser_rendering_is_opt_in_and_used_after_static_failure(session_factory, monkeypatch):
