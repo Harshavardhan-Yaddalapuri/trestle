@@ -270,7 +270,9 @@ class Settings(BaseSettings):
 
     def database_connect_args(self) -> dict:
         """Driver kwargs for create_async_engine (SSL required for Supabase)."""
-        args: dict = {"statement_cache_size": 0}
+        args: dict = {}
+        if self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql+asyncpg"):
+            args["statement_cache_size"] = 0
         if self.DATABASE_URL and (
             "supabase.co" in self.DATABASE_URL
             or "pooler.supabase.com" in self.DATABASE_URL
