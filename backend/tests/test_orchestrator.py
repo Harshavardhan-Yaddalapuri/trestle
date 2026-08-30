@@ -197,6 +197,26 @@ async def test_handle_match_request(session_factory, redis_client, seeded_grants
     assert "total_evaluated" in tool_result["data"]["result"]
 
 
+# ── Event requests ────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_event_request_requires_complete_profile(session_factory, redis_client):
+    """Event requests direct founders to complete matching preferences first."""
+    fake_llm = FakeLLMClient()
+    async with make_client_factory(session_factory, redis_client, fake_llm) as client:
+        events = await _post_chat(
+            client,
+            "I am looking for events to attend",
+            session_id="test-event-profile-required",
+        )
+
+    token_text = "".join(
+        event["data"]["delta"] for event in _events_of_type(events, "token")
+    )
+    assert "Complete it at /profile" in token_text
+    assert "done" in [event["event"] for event in events]
+
+
 # ── Test 6: handle_deep_dive ──────────────────────────────────────────────
 
 @pytest.mark.asyncio

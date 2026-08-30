@@ -65,6 +65,17 @@ RULES: list[RegexRule] = [
     ),
     RegexRule(
         pattern=re.compile(
+            r"\b(events?|conferences?|meetups?|summits?|workshops?)\b.*"
+            r"\b(attend|find|discover|recommend|looking)\b"
+            r"|\b(looking|find|recommend|discover)\b.*"
+            r"\b(events?|conferences?|meetups?|summits?|workshops?)\b",
+            re.IGNORECASE,
+        ),
+        intent="event_request",
+        confidence=0.9,
+    ),
+    RegexRule(
+        pattern=re.compile(
             r"\b(what do you (know|have)|my profile|what.*on file)\b",
             re.IGNORECASE,
         ),

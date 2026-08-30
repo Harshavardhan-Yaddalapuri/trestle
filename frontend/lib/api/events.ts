@@ -48,6 +48,8 @@ export interface MatchEventsParams {
   minScore?: number;
   includeVirtual?: boolean;
   includeExpired?: boolean;
+  locationScope?: "anywhere" | "state" | "country";
+  eventFormat?: "all" | "in_person" | "virtual";
 }
 
 export async function fetchMatchedEvents(
@@ -64,6 +66,8 @@ export async function fetchMatchedEvents(
       min_score: params.minScore ?? 0.15,
       include_virtual: params.includeVirtual ?? true,
       include_expired: params.includeExpired ?? false,
+      location_scope: params.locationScope ?? "anywhere",
+      event_format: params.eventFormat ?? "all",
     },
   });
 }

@@ -27,6 +27,7 @@ Intent labels:
 - "greet": simple greetings ("hi", "hello", "hey")
 - "discover": open-ended exploration ("what kinds of grants exist", "tell me about funding")
 - "match_request": wants grant matches now ("find me grants", "what fits my company")
+- "event_request": wants founder events to attend ("find events near me", "conferences to attend")
 - "deep_dive": wants more info on a specific grant ("tell me more about NSF SBIR", "is the YC deadline soon")
 - "profile_update": wants to update their profile ("we just incorporated in Delaware", "team size is 4 now")
 - "profile_query": wants to see what Trestle knows ("what do you have on file for me")
@@ -69,6 +70,9 @@ User: "We just incorporated in Delaware and have 4 people now"
 
 User: "Find me grants for AI safety startups raising $500k"
 {"intent":"match_request","confidence":0.9,"entities":{"grant_refs":[],"stage":null,"location":null,"industries":["ai-safety"],"funding_amount_usd_cents":50000000,"team_size":null,"action":null}}
+
+User: "I am looking for events to attend"
+{"intent":"event_request","confidence":0.95,"entities":{"grant_refs":[],"stage":null,"location":null,"industries":[],"funding_amount_usd_cents":null,"team_size":null,"action":null}}
 
 User: "I'm not interested in YC W25"
 {"intent":"lifecycle_action","confidence":0.88,"entities":{"grant_refs":["yc-w25"],"stage":null,"location":null,"industries":[],"funding_amount_usd_cents":null,"team_size":null,"action":"dismiss"}}
