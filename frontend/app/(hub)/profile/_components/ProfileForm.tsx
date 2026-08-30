@@ -1,237 +1,240 @@
 "use client";
 
 import { useState } from "react";
-import type { FounderProfile } from "@/lib/domain/founder-profile";
+import { apiClient, type ProfileIn, type ProfileOut } from "@/lib/api";
+import { getProfileReadiness } from "@/lib/profile-readiness";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { COUNTRY_OPTIONS, US_STATE_OPTIONS } from "@/lib/location-options";
 
-function linesToList(s: string): string[] {
-  return s
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
+const STAGES = ["idea", "pre_seed", "seed", "series_a", "series_b_plus", "other"];
+const INDUSTRIES = ["ai", "biotech", "climate", "fintech", "healthcare", "saas", "hardware"];
+const GOALS = ["investor_access", "hiring", "customer_discovery", "partnerships", "mentorship", "market_learning"];
+
+function moneyToCents(value: string): number | null {
+  const normalized = value.replace(/[$,\s]/g, "");
+  if (!normalized) return null;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : null;
 }
 
-function listToLines(arr: string[] | null | undefined): string {
-  return (arr || []).join("\n");
+function centsToMoney(value: number | null): string {
+  return value === null ? "" : String(value / 100);
 }
 
-interface ProfileFormProps {
-  initial: FounderProfile;
-  onSave: (profile: FounderProfile) => Promise<void>;
+function goalsToList(value: string | null): string[] {
+  return value ? value.split(",").map((goal) => goal.trim()).filter(Boolean) : [];
 }
 
-export default function ProfileForm({ initial, onSave }: ProfileFormProps) {
-  const [form, setForm] = useState(initial);
-  const [saved, setSaved] = useState(false);
+function nullable(value: string): string | null {
+  return value.trim() || null;
+}
+
+export default function ProfileForm({ initial }: { initial: ProfileOut }) {
+  const [profile, setProfile] = useState(initial);
+  const [raised, setRaised] = useState(centsToMoney(initial.funding_raised_usd_cents));
+  const [target, setTarget] = useState(centsToMoney(initial.funding_target_usd_cents));
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const readiness = getProfileReadiness(profile);
 
-  function update<K extends keyof FounderProfile>(key: K, value: FounderProfile[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setSaved(false);
+  function patch(values: Partial<ProfileOut>) {
+    setProfile((current) => ({ ...current, ...values }));
+    setStatus("idle");
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function toggleList(field: "industry" | "goals", value: string) {
+    const values = field === "industry" ? profile.industry ?? [] : goalsToList(profile.goals);
+    const next = values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+    patch(field === "industry" ? { industry: next } : { goals: next.join(",") });
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
     setSaving(true);
-    setError("");
+    setStatus("idle");
+    const data: ProfileIn = {
+      founder_name: nullable(profile.founder_name ?? ""),
+      company_name: nullable(profile.company_name ?? ""),
+      company_stage: profile.company_stage,
+      industry: profile.industry ?? [],
+      location: nullable(profile.location ?? ""),
+      website: nullable(profile.website ?? ""),
+      one_liner: nullable(profile.one_liner ?? ""),
+      goals: nullable(profile.goals ?? ""),
+      team_size: profile.team_size,
+      has_technical_cofounder: profile.has_technical_cofounder,
+      funding_raised_usd_cents: moneyToCents(raised),
+      funding_target_usd_cents: moneyToCents(target),
+      incorporated: profile.incorporated,
+      incorporation_country: nullable(profile.incorporation_country ?? ""),
+      incorporation_state: nullable(profile.incorporation_state ?? ""),
+      regulatory_status: profile.regulatory_status,
+    };
     try {
-      await onSave(form);
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save profile");
+      const saved = await apiClient.updateProfile(data);
+      setProfile(saved);
+      setRaised(centsToMoney(saved.funding_raised_usd_cents));
+      setTarget(centsToMoney(saved.funding_target_usd_cents));
+      setStatus("saved");
+    } catch {
+      setStatus("error");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {saved && (
-        <p
-          className="rounded-lg bg-secondary-container text-on-secondary-container px-4 py-3 text-sm"
-          role="status"
-        >
-          Profile saved successfully.
-        </p>
-      )}
-      {error && (
-        <p className="rounded-lg bg-error-container text-on-error-container px-4 py-3 text-sm" role="alert">
-          {error}
-        </p>
-      )}
-
-      <Card className="border-outline-variant shadow-none bg-surface-container-lowest">
-        <CardHeader>
-          <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">Company</CardTitle>
-          <CardDescription>Basics investors and grant reviewers usually ask for first.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field>
-            <Label htmlFor="companyName">Company name</Label>
-            <Input
-              id="companyName"
-              value={form.companyName}
-              onChange={(e) => update("companyName", e.target.value)}
-              required
-            />
-          </Field>
-          <Field>
-            <Label htmlFor="website">Website</Label>
-            <Input
-              id="website"
-              value={form.companyWebsite ?? ""}
-              onChange={(e) => update("companyWebsite", e.target.value || null)}
-              placeholder="https://"
-            />
-          </Field>
-          <Field>
-            <Label htmlFor="stage">Funding stage</Label>
-            <Input
-              id="stage"
-              value={form.fundingStage ?? ""}
-              onChange={(e) => update("fundingStage", e.target.value || null)}
-              placeholder="e.g. pre_seed, seed"
-            />
-          </Field>
-          <Field>
-            <Label htmlFor="hq">Headquarters</Label>
-            <Input
-              id="hq"
-              value={form.headquarters ?? ""}
-              onChange={(e) => update("headquarters", e.target.value || null)}
-            />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label htmlFor="industries">Industries (one per line)</Label>
-            <Textarea
-              id="industries"
-              rows={3}
-              value={listToLines(form.industries)}
-              onChange={(e) => update("industries", linesToList(e.target.value))}
-            />
-          </Field>
+    <form onSubmit={save} className="space-y-6">
+      <Card className="border-0 bg-secondary-container/40 shadow-sm">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium text-on-surface">Recommendation readiness: {readiness.percent}%</p>
+            <p className="text-sm text-on-surface-variant">
+              {readiness.missingBasics.length ? `Add ${readiness.missingBasics.join(", ")} for stronger matches.` : "Your core matching profile is ready."}
+            </p>
+          </div>
+          <div className="flex gap-2 text-xs">
+            <Readiness label="Grants" ready={readiness.grantsReady} />
+            <Readiness label="Events" ready={readiness.eventsReady} />
+            <Readiness label="Alerts" ready={readiness.alertsReady} />
+          </div>
         </CardContent>
       </Card>
 
-      <Card className="border-outline-variant shadow-none bg-surface-container-lowest">
-        <CardHeader>
-          <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">Product & market</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <Field>
-            <Label htmlFor="product">Product summary</Label>
-            <Textarea
-              id="product"
-              rows={3}
-              value={form.productSummary ?? ""}
-              onChange={(e) => update("productSummary", e.target.value || null)}
-            />
-          </Field>
-          <Field>
-            <Label htmlFor="market">Target market</Label>
-            <Textarea
-              id="market"
-              rows={2}
-              value={form.targetMarket ?? ""}
-              onChange={(e) => update("targetMarket", e.target.value || null)}
-            />
-          </Field>
-          <Field>
-            <Label htmlFor="traction">Traction</Label>
-            <Textarea
-              id="traction"
-              rows={2}
-              value={form.tractionSummary ?? ""}
-              onChange={(e) => update("tractionSummary", e.target.value || null)}
-            />
-          </Field>
-        </CardContent>
-      </Card>
+      <Section title="Founder and company" description="The basics that personalize your workspace.">
+        <Field label="Your name"><Input value={profile.founder_name ?? ""} onChange={(event) => patch({ founder_name: event.target.value })} /></Field>
+        <Field label="Company name"><Input required value={profile.company_name ?? ""} onChange={(event) => patch({ company_name: event.target.value })} /></Field>
+        <Field label="Website (optional)"><Input type="url" placeholder="https://example.com" value={profile.website ?? ""} onChange={(event) => patch({ website: event.target.value })} /></Field>
+        <Field label="One-line company description" className="sm:col-span-2"><Textarea maxLength={280} rows={3} placeholder="What are you building and for whom?" value={profile.one_liner ?? ""} onChange={(event) => patch({ one_liner: event.target.value })} /></Field>
+      </Section>
 
-      <Card className="border-outline-variant shadow-none bg-surface-container-lowest">
-        <CardHeader>
-          <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">Financials (bands)</CardTitle>
-          <CardDescription>Exact numbers can move to a secured field set later.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field>
-            <Label htmlFor="arr">Revenue / ARR band</Label>
-            <Input
-              id="arr"
-              value={form.arrOrRevenueBand ?? ""}
-              onChange={(e) => update("arrOrRevenueBand", e.target.value || null)}
-            />
-          </Field>
-          <Field>
-            <Label htmlFor="runway">Runway band</Label>
-            <Input
-              id="runway"
-              value={form.runwayBand ?? ""}
-              onChange={(e) => update("runwayBand", e.target.value || null)}
-            />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label htmlFor="goal">Funding goal</Label>
-            <Input
-              id="goal"
-              value={form.fundingGoal ?? ""}
-              onChange={(e) => update("fundingGoal", e.target.value || null)}
-            />
-          </Field>
-        </CardContent>
-      </Card>
+      <Section title="Company stage and sector" description="Stage and sector are the strongest starting signals for grants and events.">
+        <Field label="Company stage"><select required className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={profile.company_stage ?? ""} onChange={(event) => patch({ company_stage: event.target.value || null })}><option value="">Choose a stage</option>{STAGES.map((stage) => <option key={stage} value={stage}>{stage.replaceAll("_", " ")}</option>)}</select></Field>
+        <div className="sm:col-span-2"><Label>Industries</Label><ChipGroup values={profile.industry ?? []} options={INDUSTRIES} onToggle={(value) => toggleList("industry", value)} /></div>
+      </Section>
 
-      <Card className="border-outline-variant shadow-none bg-surface-container-lowest">
-        <CardHeader>
-          <CardTitle className="font-[family-name:var(--font-plus-jakarta)]">Preferences</CardTitle>
-          <CardDescription>Used to rank opportunities in discovery.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <Field>
-            <Label htmlFor="grantTypes">Grant types (one per line)</Label>
-            <Textarea
-              id="grantTypes"
-              rows={3}
-              value={listToLines(form.grantTypes)}
-              onChange={(e) => update("grantTypes", linesToList(e.target.value))}
-            />
+      <Section title="Location and incorporation" description="Location and incorporation rules often determine grant eligibility.">
+        <Field label="Operating location"><Input required placeholder="City, state or country" value={profile.location ?? ""} onChange={(event) => patch({ location: event.target.value })} /></Field>
+        <Field label="Incorporated?"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={profile.incorporated === null ? "" : String(profile.incorporated)} onChange={(event) => patch({ incorporated: event.target.value === "" ? null : event.target.value === "true" })}><option value="">Not sure yet</option><option value="true">Yes</option><option value="false">No</option></select></Field>
+        <Field label="Incorporation country">
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={profile.incorporation_country ?? ""}
+            onChange={(event) => patch({
+              incorporation_country: event.target.value || null,
+              incorporation_state: event.target.value === "US" ? profile.incorporation_state : null,
+            })}
+          >
+            <option value="">Select a country</option>
+            {COUNTRY_OPTIONS.map((country) => <option key={country.value} value={country.value}>{country.label}</option>)}
+          </select>
+        </Field>
+        {profile.incorporation_country === "US" ? (
+          <Field label="Incorporation state">
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={profile.incorporation_state ?? ""}
+              onChange={(event) => patch({ incorporation_state: event.target.value || null })}
+            >
+              <option value="">Select a state</option>
+              {US_STATE_OPTIONS.map((state) => <option key={state.value} value={state.value}>{state.label}</option>)}
+            </select>
           </Field>
-          <Field>
-            <Label htmlFor="geo">Geographic preferences (one per line)</Label>
-            <Textarea
-              id="geo"
-              rows={2}
-              value={listToLines(form.geographicPreferences)}
-              onChange={(e) => update("geographicPreferences", linesToList(e.target.value))}
-            />
+        ) : (
+          <Field label="Incorporation state or province" hint="Optional two-letter code">
+            <Input maxLength={2} value={profile.incorporation_state ?? ""} onChange={(event) => patch({ incorporation_state: event.target.value.toUpperCase() })} />
           </Field>
-        </CardContent>
-      </Card>
+        )}
+      </Section>
 
-      <Button type="submit" disabled={saving}>
-        {saving ? "Saving…" : "Save profile"}
-      </Button>
+      <Section title="Team and funding" description="Optional and private: these details improve eligibility checks; they are not shown to other users.">
+        <Field label="Team size"><Input min={1} type="number" value={profile.team_size ?? ""} onChange={(event) => patch({ team_size: event.target.value ? Number(event.target.value) : null })} /></Field>
+        <Field label="Technical cofounder"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={profile.has_technical_cofounder === null ? "" : String(profile.has_technical_cofounder)} onChange={(event) => patch({ has_technical_cofounder: event.target.value === "" ? null : event.target.value === "true" })}><option value="">Prefer not to say</option><option value="true">Yes</option><option value="false">No</option></select></Field>
+        <Field label="Funding raised (USD)"><Input inputMode="decimal" placeholder="0" value={raised} onChange={(event) => { setRaised(event.target.value); setStatus("idle"); }} /></Field>
+        <Field label="Funding target (USD)"><Input inputMode="decimal" placeholder="250000" value={target} onChange={(event) => { setTarget(event.target.value); setStatus("idle"); }} /></Field>
+      </Section>
+
+      <Section title="Goals" description="Select outcomes you want events and recommendations to prioritize.">
+        <div className="sm:col-span-2"><ChipGroup values={goalsToList(profile.goals)} options={GOALS} onToggle={(value) => toggleList("goals", value)} /></div>
+      </Section>
+
+      <Section title="Regulatory details" description="Optional. Add only if regulatory readiness affects the programs you pursue.">
+        <Field label="Regulatory status" className="sm:col-span-2"><Textarea rows={2} placeholder="e.g. FDA pathway under evaluation" value={String(profile.regulatory_status?.summary ?? "")} onChange={(event) => patch({ regulatory_status: event.target.value.trim() ? { summary: event.target.value } : {} })} /></Field>
+      </Section>
+      <SaveFooter status={status} saving={saving} />
     </form>
   );
 }
 
-function Field({
-  children,
-  className,
+function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return <Card className="border-0 bg-surface-container-lowest shadow-sm"><CardHeader><CardTitle className="font-[family-name:var(--font-plus-jakarta)]">{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">{children}</CardContent></Card>;
+}
+
+function Field({ label, hint, className, children }: { label: string; hint?: string; className?: string; children: React.ReactNode }) {
+  return <div className={`grid gap-2 ${className ?? ""}`}><Label>{label}</Label>{children}{hint && <p className="text-xs text-on-surface-variant">{hint}</p>}</div>;
+}
+
+function ChipGroup({ values, options, onToggle }: { values: string[]; options: string[]; onToggle: (value: string) => void }) {
+  return <div className="mt-2 flex flex-wrap gap-2">{options.map((option) => <button key={option} type="button" onClick={() => onToggle(option)} className={`rounded-full px-3 py-1.5 text-sm capitalize ${values.includes(option) ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant"}`}>{option.replaceAll("_", " ")}</button>)}</div>;
+}
+
+function Readiness({ label, ready }: { label: string; ready: boolean }) {
+  return <span className={`rounded-full px-3 py-1.5 ${ready ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant"}`}>{label}</span>;
+}
+
+function SaveFooter({
+  status,
+  saving,
 }: {
-  children: React.ReactNode;
-  className?: string;
+  status: "idle" | "saved" | "error";
+  saving: boolean;
 }) {
-  return <div className={`grid gap-2 ${className ?? ""}`}>{children}</div>;
+  return (
+    <div
+      className={`flex flex-col gap-3 rounded-2xl px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
+        status === "saved"
+          ? "bg-secondary-container/60"
+          : status === "error"
+            ? "bg-error-container/30"
+            : "bg-surface-container-lowest"
+      }`}
+    >
+      <div className="min-h-5 text-sm">
+        {status === "saved" && (
+          <p role="status" className="flex items-center gap-2 text-on-secondary-container">
+            <span className="material-symbols-outlined text-primary" style={{ fontSize: "20px" }}>
+              check_circle
+            </span>
+            Profile saved. Recommendations now use these details.
+          </p>
+        )}
+        {status === "error" && (
+          <p role="alert" className="flex items-center gap-2 text-on-error-container">
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              error
+            </span>
+            We could not save your profile. Check required fields and try again.
+          </p>
+        )}
+      </div>
+      <Button type="submit" disabled={saving} className="shrink-0 rounded-full">
+        {saving ? (
+          "Saving…"
+        ) : status === "saved" ? (
+          <>
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+              check
+            </span>
+            Saved
+          </>
+        ) : (
+          "Save profile"
+        )}
+      </Button>
+    </div>
+  );
 }

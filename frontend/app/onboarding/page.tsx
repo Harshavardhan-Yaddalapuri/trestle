@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiClient, type SSEEvent } from "@/lib/api";
 
 interface OnboardingMessage {
@@ -242,12 +243,18 @@ export default function OnboardingPage() {
               Trestle Onboarding
             </h1>
             <p className="text-on-surface-variant" style={{ fontSize: "12px", fontWeight: 500 }}>
-              Let's build your founder profile
+              Let&apos;s build your founder profile
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/onboarding/profile"
+            className="hidden rounded-full bg-surface-container px-3 py-2 text-xs font-medium text-on-surface sm:inline-flex"
+          >
+            Use guided form
+          </Link>
           {/* Progress bar */}
           <div className="w-32 h-2 bg-surface-container-high rounded-full overflow-hidden">
             <div

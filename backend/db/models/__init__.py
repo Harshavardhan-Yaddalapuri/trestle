@@ -1,6 +1,7 @@
 from backend.db.models.alert_delivery import AlertDelivery
 from backend.db.models.chat import Conversation, Message
 from backend.db.models.event import Event
+from backend.db.models.event_ingestion import EventCandidate, EventDiscoveryRun, EventProvenance
 from backend.db.models.grant import Grant
 from backend.db.models.grant_association import GrantDismissal, GrantLifecycleEvent, GrantTrack
 from backend.db.models.ingest_run import IngestRun
@@ -15,6 +16,9 @@ __all__ = [
     "AlertDelivery",
     "Conversation",
     "Event",
+    "EventCandidate",
+    "EventDiscoveryRun",
+    "EventProvenance",
     "Grant",
     "GrantDismissal",
     "GrantLifecycleEvent",

@@ -77,6 +77,18 @@ async def test_match_request_regex():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_event_request_regex():
+    result = await classify(
+        "I am looking for events to attend",
+        FakeLLMClient(Exception("should not call LLM")),
+    )
+    assert result.intent == "event_request"
+    assert result.classified_by == "regex"
+    assert not respx.calls
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_profile_query_regex():
     result = await classify(
         "What do you have on file for me?",

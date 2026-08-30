@@ -1,21 +1,23 @@
+/**
+ * Legacy mock-data shape retained for isolated fixture modules only.
+ *
+ * Product profile screens use `ProfileIn` and `ProfileOut` from `@/lib/api`;
+ * do not use this type for persisted founder data.
+ */
 export interface FounderProfile {
   schemaVersion: 1;
   companyName: string;
   companyWebsite: string | null;
-  /** e.g. pre_seed, seed */
   fundingStage: string | null;
   headquarters: string | null;
   industries: string[];
   productSummary: string | null;
   targetMarket: string | null;
-  /** Free-text or structured later */
   tractionSummary: string | null;
   arrOrRevenueBand: string | null;
   runwayBand: string | null;
   fundingGoal: string | null;
-  /** Preferred program types */
   grantTypes: string[];
   geographicPreferences: string[];
-  /** Forward-compatible bag */
   extras?: Record<string, unknown>;
 }

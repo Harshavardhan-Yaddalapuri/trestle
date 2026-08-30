@@ -11,6 +11,9 @@ import {
 } from "@/lib/grants-list-query";
 import GrantsTable from "./_components/GrantsTable";
 import FilterDropdown from "@/components/filter-dropdown";
+import type { MatchResult, ProfileOut } from "@/lib/api";
+import { serverRequest } from "@/lib/api/server";
+import { getProfileReadiness } from "@/lib/profile-readiness";
 
 export const metadata = {
   title: "Grants — Trestle",
@@ -33,6 +36,8 @@ export default async function GrantsPage({ searchParams }: PageProps) {
 
   let grants: Awaited<ReturnType<typeof listTrackedGrants>> = [];
   let loadError: string | null = null;
+  let recommendations: MatchResult[] = [];
+  let recommendationsReady = false;
 
   try {
     grants = await listTrackedGrants({
@@ -45,6 +50,20 @@ export default async function GrantsPage({ searchParams }: PageProps) {
   } catch (err) {
     loadError =
       err instanceof Error ? err.message : "Could not load grants from the API.";
+  }
+
+  try {
+    const profile = await serverRequest<ProfileOut>("/api/users/profile");
+    recommendationsReady = getProfileReadiness(profile).grantsReady;
+    if (recommendationsReady) {
+      const response = await serverRequest<{ results: MatchResult[] }>("/api/grants/match", {
+        method: "POST",
+        body: { limit: 3, min_score: 0.2 },
+      });
+      recommendations = response.results;
+    }
+  } catch {
+    recommendationsReady = false;
   }
 
   const usingApi = !isMockDataSource();
@@ -91,6 +110,28 @@ export default async function GrantsPage({ searchParams }: PageProps) {
           {loadError}
         </div>
       ) : null}
+
+      <section className="rounded-2xl bg-secondary-container/40 p-5">
+        <h2 className="font-[family-name:var(--font-plus-jakarta)] text-lg font-medium text-on-surface">
+          Recommended for your company
+        </h2>
+        {recommendationsReady ? (
+          recommendations.length ? (
+            <ul className="mt-3 space-y-2">
+              {recommendations.map((match) => (
+                <li key={match.grant.id} className="text-sm text-on-surface">
+                  <span className="font-medium">{match.grant.name}</span>
+                  <span className="text-on-surface-variant"> · {match.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="mt-2 text-sm text-on-surface-variant">No current grant matches. New opportunities are checked as sources refresh.</p>
+        ) : (
+          <p className="mt-2 text-sm text-on-surface-variant">
+            Add your stage, industry, location, and incorporation status to see grant recommendations. <a className="font-medium text-primary hover:underline" href="/profile">Complete profile</a>
+          </p>
+        )}
+      </section>
 
       <div className="flex flex-wrap items-center gap-3">
         <FilterDropdown

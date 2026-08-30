@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api-error";
+import type { ApiEventMatchResponse } from "@/lib/api/events-types";
 
 export { ApiError };
 
@@ -91,6 +92,7 @@ export interface ProfileIn {
   incorporated?: boolean | null;
   incorporation_country?: string | null;
   incorporation_state?: string | null;
+  regulatory_status?: Record<string, unknown> | null;
 }
 
 export interface ProfileOut {
@@ -111,8 +113,15 @@ export interface ProfileOut {
   incorporated: boolean | null;
   incorporation_country: string | null;
   incorporation_state: string | null;
+  regulatory_status: Record<string, unknown>;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface AlertPreferences {
+  deadline_reminders: boolean;
+  new_grant_matches: boolean;
+  check_ins: boolean;
 }
 
 export interface ChatMessageIn {
@@ -313,6 +322,35 @@ export const apiClient = {
 
   updateProfile: (data: ProfileIn) =>
     request<ProfileOut>("/api/users/profile", {
+      method: "PUT",
+      body: data,
+    }),
+
+  matchEvents: (params: {
+    limit?: number;
+    minScore?: number;
+    includeVirtual?: boolean;
+    includeExpired?: boolean;
+    locationScope?: "anywhere" | "state" | "country";
+    eventFormat?: "all" | "in_person" | "virtual";
+  } = {}) =>
+    request<ApiEventMatchResponse>("/api/events/match", {
+      method: "POST",
+      body: {
+        limit: params.limit ?? 50,
+        min_score: params.minScore ?? 0.2,
+        include_virtual: params.includeVirtual ?? true,
+        include_expired: params.includeExpired ?? false,
+        location_scope: params.locationScope ?? "anywhere",
+        event_format: params.eventFormat ?? "all",
+      },
+    }),
+
+  getAlertPreferences: () =>
+    request<AlertPreferences>("/api/users/alert-preferences"),
+
+  updateAlertPreferences: (data: Partial<AlertPreferences>) =>
+    request<AlertPreferences>("/api/users/alert-preferences", {
       method: "PUT",
       body: data,
     }),
