@@ -1,10 +1,10 @@
 # Trestle
 
-[![Watch the demo]](https://github.com/user-attachments/assets/e7d02bd3-b304-4262-905b-0fa6b48efd05)
-
 > **Conversational AI agent for startup founders.** Finds grants, accelerators, and resources you're actually eligible for — not a firehose of irrelevant links.
 
 Trestle is a personal assistant that learns about your startup through natural conversation and proactively surfaces matching opportunities. Built for founders who don't have time to fill out 80-question forms.
+
+[![Watch the demo]](https://github.com/user-attachments/assets/e7d02bd3-b304-4262-905b-0fa6b48efd05)
 
 ## Architecture
 
