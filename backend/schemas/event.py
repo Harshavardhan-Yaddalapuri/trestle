@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -48,12 +49,16 @@ class EventMatchRequest(BaseModel):
     min_score: float = Field(default=0.0, ge=0.0, le=1.0)
     include_virtual: bool = True
     include_expired: bool = False
+    location_scope: Literal["anywhere", "state", "country"] = "anywhere"
+    event_format: Literal["all", "in_person", "virtual"] = "all"
 
 
 class EventMatchProfile(BaseModel):
     company_stage: str | None = None
     industry: list[str] | None = None
     location: str | None = None
+    incorporation_country: str | None = None
+    incorporation_state: str | None = None
     goals: list[str] = Field(default_factory=list)
 
 

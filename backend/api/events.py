@@ -22,6 +22,7 @@ from backend.schemas.event import (
     GenericEventDiscoveryResponse,
 )
 from backend.services.events.generic.pipeline import GenericEventPipeline
+from backend.services.events.location_normalization import event_matches_location_scope
 from backend.services.events.matching import evaluate_event, is_event_active, resolve_event_profile
 from backend.services.events.orchestration import run_events_discovery_sweep
 from backend.services.llm.dependency import get_llm_client
@@ -162,12 +163,24 @@ async def match_events(
     match_profile = resolve_event_profile(profile, body)
 
     stmt = sa.select(Event).where(Event.status != "archived")
-    if not body.include_virtual:
+    if not body.include_virtual or body.event_format == "in_person":
         stmt = stmt.where(Event.is_virtual.is_(False))
+    elif body.event_format == "virtual":
+        stmt = stmt.where(Event.is_virtual.is_(True))
     result = await db.execute(stmt.limit(1000))
     events = list(result.scalars().all())
 
-    filtered = [e for e in events if is_event_active(e, include_expired=body.include_expired)]
+    filtered = [
+        event
+        for event in events
+        if is_event_active(event, include_expired=body.include_expired)
+        and event_matches_location_scope(
+            event,
+            body.location_scope,
+            state_code=profile.incorporation_state if profile else None,
+            country_code=profile.incorporation_country if profile else None,
+        )
+    ]
     total_evaluated = len(filtered)
     scored = [
         evaluate_event(match_profile, event, include_virtual=body.include_virtual)

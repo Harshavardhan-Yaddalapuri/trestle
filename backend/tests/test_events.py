@@ -11,6 +11,12 @@ from backend.db.models.event import Event
 from backend.db.models.profile import Profile
 from backend.schemas.event import EventMatchRequest
 from backend.services.events.discovery import upsert_discovered_events
+from backend.services.events.location_normalization import (
+    event_is_in_country,
+    event_is_in_state,
+    normalize_country,
+    normalize_us_state,
+)
 from backend.services.events.matching import evaluate_event, resolve_event_profile
 from backend.services.events.orchestration import run_events_discovery_sweep
 from backend.services.events.parser import parse_jsonld_events
@@ -152,6 +158,84 @@ def test_match_events_uses_profile_context():
     assert strong_result.score > weak_result.score
     assert "industry" in strong_result.matched_on
     assert "outcome" in strong_result.matched_on
+
+
+def test_event_location_matches_city_from_city_state_profile():
+    """A profile's display location should match separately stored event city data."""
+    profile = Profile(
+        session_id="events-session-detroit",
+        company_stage="seed",
+        industry=["ai"],
+        location="Detroit, MI",
+        goals="networking",
+    )
+    event = Event(
+        id=uuid.uuid4(),
+        source_id="event:detroit",
+        source="web_jsonld",
+        source_payload={},
+        name="Detroit Founder Meetup",
+        description="Meet local startup founders.",
+        url="https://example.org/detroit",
+        starts_at=datetime.now(UTC) + timedelta(days=7),
+        is_virtual=False,
+        city="Detroit",
+        region="Michigan",
+        industry_tags=["ai"],
+        stage_tags=["seed"],
+        benefit_tags=["networking"],
+        status="active",
+    )
+
+    result = evaluate_event(
+        resolve_event_profile(profile, EventMatchRequest()),
+        event,
+        include_virtual=True,
+    )
+
+    assert "distance" in result.matched_on
+
+
+@pytest.mark.parametrize(
+    ("raw_country", "expected"),
+    [
+        ("US", "US"),
+        ("USA", "US"),
+        ("United States of America", "US"),
+        ("United Kingdom", "GB"),
+    ],
+)
+def test_normalize_country_accepts_codes_and_names(raw_country, expected):
+    assert normalize_country(raw_country) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_state", "expected"),
+    [("CA", "CA"), ("California", "CA"), ("Michigan", "MI")],
+)
+def test_normalize_us_state_accepts_codes_and_names(raw_state, expected):
+    assert normalize_us_state(raw_state) == expected
+
+
+def test_event_location_scope_matches_full_country_and_state_names():
+    event = Event(
+        id=uuid.uuid4(),
+        source_id="event:california",
+        source="web_jsonld",
+        source_payload={},
+        name="California Founder Meetup",
+        description="Meet local startup founders.",
+        url="https://example.org/california",
+        starts_at=datetime.now(UTC) + timedelta(days=7),
+        is_virtual=False,
+        city="San Francisco",
+        region="California",
+        country="United States of America",
+        status="active",
+    )
+
+    assert event_is_in_country(event, "US")
+    assert event_is_in_state(event, "CA", "US")
 
 
 async def test_events_discovery_sweep_happy_path(session_factory, redis_client, monkeypatch):

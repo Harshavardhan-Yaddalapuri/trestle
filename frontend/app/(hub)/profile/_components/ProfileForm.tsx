@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { COUNTRY_OPTIONS, US_STATE_OPTIONS } from "@/lib/location-options";
 
 const STAGES = ["idea", "pre_seed", "seed", "series_a", "series_b_plus", "other"];
 const INDUSTRIES = ["ai", "biotech", "climate", "fintech", "healthcare", "saas", "hardware"];
@@ -103,8 +104,6 @@ export default function ProfileForm({ initial }: { initial: ProfileOut }) {
           </div>
         </CardContent>
       </Card>
-      {status === "saved" && <p role="status" className="rounded-xl bg-secondary-container px-4 py-3 text-sm text-on-secondary-container">Profile saved. Recommendations now use these details.</p>}
-      {status === "error" && <p role="alert" className="rounded-xl bg-error-container px-4 py-3 text-sm text-on-error-container">We could not save your profile. Check required fields and try again.</p>}
 
       <Section title="Founder and company" description="The basics that personalize your workspace.">
         <Field label="Your name"><Input value={profile.founder_name ?? ""} onChange={(event) => patch({ founder_name: event.target.value })} /></Field>
@@ -121,8 +120,35 @@ export default function ProfileForm({ initial }: { initial: ProfileOut }) {
       <Section title="Location and incorporation" description="Location and incorporation rules often determine grant eligibility.">
         <Field label="Operating location"><Input required placeholder="City, state or country" value={profile.location ?? ""} onChange={(event) => patch({ location: event.target.value })} /></Field>
         <Field label="Incorporated?"><select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={profile.incorporated === null ? "" : String(profile.incorporated)} onChange={(event) => patch({ incorporated: event.target.value === "" ? null : event.target.value === "true" })}><option value="">Not sure yet</option><option value="true">Yes</option><option value="false">No</option></select></Field>
-        <Field label="Incorporation country" hint="Two-letter code, e.g. US"><Input maxLength={2} value={profile.incorporation_country ?? ""} onChange={(event) => patch({ incorporation_country: event.target.value.toUpperCase() })} /></Field>
-        <Field label="Incorporation state" hint="Optional two-letter code"><Input maxLength={2} value={profile.incorporation_state ?? ""} onChange={(event) => patch({ incorporation_state: event.target.value.toUpperCase() })} /></Field>
+        <Field label="Incorporation country">
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={profile.incorporation_country ?? ""}
+            onChange={(event) => patch({
+              incorporation_country: event.target.value || null,
+              incorporation_state: event.target.value === "US" ? profile.incorporation_state : null,
+            })}
+          >
+            <option value="">Select a country</option>
+            {COUNTRY_OPTIONS.map((country) => <option key={country.value} value={country.value}>{country.label}</option>)}
+          </select>
+        </Field>
+        {profile.incorporation_country === "US" ? (
+          <Field label="Incorporation state">
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={profile.incorporation_state ?? ""}
+              onChange={(event) => patch({ incorporation_state: event.target.value || null })}
+            >
+              <option value="">Select a state</option>
+              {US_STATE_OPTIONS.map((state) => <option key={state.value} value={state.value}>{state.label}</option>)}
+            </select>
+          </Field>
+        ) : (
+          <Field label="Incorporation state or province" hint="Optional two-letter code">
+            <Input maxLength={2} value={profile.incorporation_state ?? ""} onChange={(event) => patch({ incorporation_state: event.target.value.toUpperCase() })} />
+          </Field>
+        )}
       </Section>
 
       <Section title="Team and funding" description="Optional and private: these details improve eligibility checks; they are not shown to other users.">
@@ -139,7 +165,7 @@ export default function ProfileForm({ initial }: { initial: ProfileOut }) {
       <Section title="Regulatory details" description="Optional. Add only if regulatory readiness affects the programs you pursue.">
         <Field label="Regulatory status" className="sm:col-span-2"><Textarea rows={2} placeholder="e.g. FDA pathway under evaluation" value={String(profile.regulatory_status?.summary ?? "")} onChange={(event) => patch({ regulatory_status: event.target.value.trim() ? { summary: event.target.value } : {} })} /></Field>
       </Section>
-      <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save profile"}</Button>
+      <SaveFooter status={status} saving={saving} />
     </form>
   );
 }
@@ -158,4 +184,57 @@ function ChipGroup({ values, options, onToggle }: { values: string[]; options: s
 
 function Readiness({ label, ready }: { label: string; ready: boolean }) {
   return <span className={`rounded-full px-3 py-1.5 ${ready ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant"}`}>{label}</span>;
+}
+
+function SaveFooter({
+  status,
+  saving,
+}: {
+  status: "idle" | "saved" | "error";
+  saving: boolean;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-3 rounded-2xl px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
+        status === "saved"
+          ? "bg-secondary-container/60"
+          : status === "error"
+            ? "bg-error-container/30"
+            : "bg-surface-container-lowest"
+      }`}
+    >
+      <div className="min-h-5 text-sm">
+        {status === "saved" && (
+          <p role="status" className="flex items-center gap-2 text-on-secondary-container">
+            <span className="material-symbols-outlined text-primary" style={{ fontSize: "20px" }}>
+              check_circle
+            </span>
+            Profile saved. Recommendations now use these details.
+          </p>
+        )}
+        {status === "error" && (
+          <p role="alert" className="flex items-center gap-2 text-on-error-container">
+            <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>
+              error
+            </span>
+            We could not save your profile. Check required fields and try again.
+          </p>
+        )}
+      </div>
+      <Button type="submit" disabled={saving} className="shrink-0 rounded-full">
+        {saving ? (
+          "Saving…"
+        ) : status === "saved" ? (
+          <>
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+              check
+            </span>
+            Saved
+          </>
+        ) : (
+          "Save profile"
+        )}
+      </Button>
+    </div>
+  );
 }

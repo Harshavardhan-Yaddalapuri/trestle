@@ -8,6 +8,7 @@ IntentLabel = Literal[
     "greet",
     "discover",
     "match_request",
+    "event_request",
     "deep_dive",
     "profile_update",
     "profile_query",

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from backend.db.models.event import Event
 from backend.db.models.profile import Profile
 from backend.schemas.event import EventMatchProfile, EventMatchRequest, EventMatchResult, EventSummary
+from backend.services.events.location_normalization import event_is_in_country, event_is_in_state
 from backend.services.matching import jaccard
 
 _WEIGHTS = {
@@ -39,6 +40,8 @@ def resolve_event_profile(profile: Profile | None, overrides: EventMatchRequest)
         company_stage=overrides.stage if overrides.stage is not None else (profile.company_stage if profile else None),
         industry=overrides.industry if overrides.industry is not None else (profile.industry if profile else None),
         location=overrides.location if overrides.location is not None else (profile.location if profile else None),
+        incorporation_country=profile.incorporation_country if profile else None,
+        incorporation_state=profile.incorporation_state if profile else None,
         goals=_parse_goals(overrides.goals, profile),
     )
 
@@ -89,11 +92,23 @@ def _score_distance(profile: EventMatchProfile, event: Event, include_virtual: b
         return (1.0 if include_virtual else 0.0), include_virtual
     if not profile.location:
         return 0.4, False
-    target = profile.location.lower()
     location_blob = " ".join(
         v.lower() for v in [event.location_text, event.city, event.region, event.country] if v
     )
-    if target and target in location_blob:
+    # Profiles commonly use "City, ST" while sources separately store city and
+    # region. Match a meaningful location part rather than the full display text.
+    location_terms = [
+        term.strip().lower()
+        for term in profile.location.split(",")
+        if len(term.strip()) > 1
+    ]
+    if any(term in location_blob for term in location_terms):
+        return 1.0, True
+    if event_is_in_state(
+        event,
+        profile.incorporation_state,
+        profile.incorporation_country,
+    ) or event_is_in_country(event, profile.incorporation_country):
         return 1.0, True
     return 0.15, False
 

@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api-error";
+import type { ApiEventMatchResponse } from "@/lib/api/events-types";
 
 export { ApiError };
 
@@ -323,6 +324,26 @@ export const apiClient = {
     request<ProfileOut>("/api/users/profile", {
       method: "PUT",
       body: data,
+    }),
+
+  matchEvents: (params: {
+    limit?: number;
+    minScore?: number;
+    includeVirtual?: boolean;
+    includeExpired?: boolean;
+    locationScope?: "anywhere" | "state" | "country";
+    eventFormat?: "all" | "in_person" | "virtual";
+  } = {}) =>
+    request<ApiEventMatchResponse>("/api/events/match", {
+      method: "POST",
+      body: {
+        limit: params.limit ?? 50,
+        min_score: params.minScore ?? 0.2,
+        include_virtual: params.includeVirtual ?? true,
+        include_expired: params.includeExpired ?? false,
+        location_scope: params.locationScope ?? "anywhere",
+        event_format: params.eventFormat ?? "all",
+      },
     }),
 
   getAlertPreferences: () =>

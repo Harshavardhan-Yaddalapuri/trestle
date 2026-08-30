@@ -1,37 +1,17 @@
 import Link from "next/link";
 import { fetchMatchedEvents } from "@/lib/api/events";
-import type { ApiEventSummary } from "@/lib/api/events-types";
+import type { ApiEventMatchResult } from "@/lib/api/events-types";
 import type { ProfileOut } from "@/lib/api";
 import { getProfileReadiness } from "@/lib/profile-readiness";
 import { serverRequest } from "@/lib/api/server";
+import { EventMatchesTable } from "./_components/EventMatchesTable";
 
 export const metadata = {
   title: "Events - Trestle",
 };
 
-function formatDateRange(startsAt: string, endsAt: string | null): string {
-  const start = new Date(startsAt);
-  const startLabel = start.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  if (!endsAt) return startLabel;
-  const end = new Date(endsAt);
-  const endLabel = end.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${startLabel} - ${endLabel}`;
-}
-
-function getLocationLabel(event: ApiEventSummary): string {
-  return event.location_text ?? event.city ?? event.region ?? event.country ?? "Virtual";
-}
-
 export default async function EventsPage() {
-  let events: ApiEventSummary[] = [];
+  let matches: ApiEventMatchResult[] = [];
   let loadError: string | null = null;
   let profile: ProfileOut | null = null;
 
@@ -39,7 +19,7 @@ export default async function EventsPage() {
     profile = await serverRequest<ProfileOut>("/api/users/profile");
     if (getProfileReadiness(profile).eventsReady) {
       const response = await fetchMatchedEvents({ limit: 50, minScore: 0.2 });
-      events = response.results.map((row) => row.event);
+      matches = response.results;
     }
   } catch (err) {
     loadError =
@@ -82,57 +62,11 @@ export default async function EventsPage() {
           </Link>
         </div>
       ) : (
-        <div className="rounded-xl border border-outline-variant overflow-hidden bg-surface-container-lowest">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-surface-container text-on-surface-variant text-xs uppercase tracking-wide">
-            <tr>
-              <th className="px-4 py-3">Event</th>
-              <th className="px-4 py-3 hidden md:table-cell">Date</th>
-              <th className="px-4 py-3 hidden lg:table-cell">Location</th>
-              <th className="px-4 py-3">Format</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-on-surface-variant">
-                  No current events match your profile. Check back soon as sources update.
-                </td>
-              </tr>
-            ) : (
-              events.map((event) => (
-                <tr
-                  key={event.id}
-                  className="border-t border-outline-variant hover:bg-surface-variant/40"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      className="font-medium text-primary hover:underline"
-                      href={event.url}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      {event.name}
-                    </Link>
-                    <p className="mt-0.5 text-xs text-on-surface-variant line-clamp-2">
-                      {event.description}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-on-surface-variant hidden md:table-cell">
-                    {formatDateRange(event.starts_at, event.ends_at)}
-                  </td>
-                  <td className="px-4 py-3 text-on-surface-variant hidden lg:table-cell">
-                    {getLocationLabel(event)}
-                  </td>
-                  <td className="px-4 py-3 text-on-surface-variant">
-                    {event.is_virtual ? "Virtual" : "In person"}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        </div>
+        <EventMatchesTable
+          matches={matches}
+          profileState={profile?.incorporation_state ?? null}
+          profileCountry={profile?.incorporation_country ?? null}
+        />
       )}
     </div>
   );
